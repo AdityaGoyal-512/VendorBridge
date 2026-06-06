@@ -8,6 +8,8 @@ import Vendors from './pages/Vendors';
 import RFQs from './pages/RFQs';
 
 import Quotations from './pages/Quotations';
+import SubmitQuotation from './pages/SubmitQuotation';
+import CompareQuotations from './pages/CompareQuotations';
 import Approvals from './pages/Approvals';
 
 import PurchaseOrders from './pages/PurchaseOrders';
@@ -25,6 +27,8 @@ function App() {
           <Route path="vendors" element={<Vendors />} />
           <Route path="rfqs" element={<RFQs />} />
           <Route path="quotations" element={<Quotations />} />
+          <Route path="quotations/submit" element={<SubmitQuotation />} />
+          <Route path="quotations/compare" element={<CompareQuotations />} />
           <Route path="approvals" element={<Approvals />} />
           <Route path="purchase-orders" element={<PurchaseOrders />} />
           <Route path="invoices" element={<Invoices />} />

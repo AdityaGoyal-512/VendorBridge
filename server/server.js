@@ -14,6 +14,8 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/vendorbrid
 app.use(cors());
 app.use(express.json());
 
+import quotationRoutes from './routes/quotationRoutes.js';
+
 // Basic Route
 app.get('/api/v1/health', (req, res) => {
   res.json({ status: 'active', message: 'VendorBridge API is running!' });
@@ -28,6 +30,9 @@ app.get('/api/v1/vendors', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
+// API Routes
+app.use('/api/v1/quotations', quotationRoutes);
 
 // Connect to MongoDB and start server
 mongoose.connect(MONGO_URI)
