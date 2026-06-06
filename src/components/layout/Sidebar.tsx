@@ -15,16 +15,16 @@ import {
 } from 'lucide-react';
 
 const sidebarItems = [
-  { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { name: 'Vendors', path: '/vendors', icon: Users },
-  { name: 'RFQs', path: '/rfqs', icon: FileText },
-  { name: 'Quotations', path: '/quotations', icon: FileCheck },
-  { name: 'Approvals', path: '/approvals', icon: CheckSquare },
-  { name: 'Purchase Orders', path: '/purchase-orders', icon: ShoppingCart },
-  { name: 'Invoices', path: '/invoices', icon: Receipt },
-  { name: 'Reports', path: '/reports', icon: BarChart3 },
-  { name: 'Activity Logs', path: '/activity-logs', icon: History },
-  { name: 'User Management', path: '/users', icon: UserCog },
+  { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['all'] },
+  { name: 'Vendors', path: '/vendors', icon: Users, roles: ['admin', 'manager', 'procurement_officer'] },
+  { name: 'RFQs', path: '/rfqs', icon: FileText, roles: ['all'] },
+  { name: 'Quotations', path: '/quotations', icon: FileCheck, roles: ['all'] },
+  { name: 'Approvals', path: '/approvals', icon: CheckSquare, roles: ['admin', 'manager', 'procurement_officer'] },
+  { name: 'Purchase Orders', path: '/purchase-orders', icon: ShoppingCart, roles: ['all'] },
+  { name: 'Invoices', path: '/invoices', icon: Receipt, roles: ['all'] },
+  { name: 'Reports', path: '/reports', icon: BarChart3, roles: ['admin', 'manager', 'procurement_officer'] },
+  { name: 'Activity Logs', path: '/activity-logs', icon: History, roles: ['admin', 'manager', 'procurement_officer'] },
+  { name: 'User Management', path: '/users', icon: UserCog, roles: ['admin'] },
 ];
 
 export default function Sidebar() {
@@ -78,6 +78,10 @@ export default function Sidebar() {
       <div className="flex-1 overflow-y-auto py-6 px-4">
         <nav className="space-y-1">
           {sidebarItems.map((item) => {
+            const rawUserRole = user?.role || "procurement_officer";
+            if (!item.roles.includes('all') && !item.roles.includes(rawUserRole)) {
+              return null;
+            }
             const isActive = location.pathname.startsWith(item.path);
             const Icon = item.icon;
             
