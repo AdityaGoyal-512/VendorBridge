@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { 
   LayoutDashboard, 
@@ -9,7 +9,9 @@ import {
   ShoppingCart, 
   Receipt, 
   BarChart3, 
-  History 
+  History,
+  UserCog,
+  LogOut,
 } from 'lucide-react';
 
 const sidebarItems = [
@@ -22,10 +24,45 @@ const sidebarItems = [
   { name: 'Invoices', path: '/invoices', icon: Receipt },
   { name: 'Reports', path: '/reports', icon: BarChart3 },
   { name: 'Activity Logs', path: '/activity-logs', icon: History },
+  { name: 'User Management', path: '/users', icon: UserCog },
 ];
 
 export default function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Load user info from localStorage
+  const userStr = localStorage.getItem("user");
+  const user = userStr ? JSON.parse(userStr) : null;
+  const userName = user?.name || "John Doe";
+  const userRole = user?.role 
+    ? user.role.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) 
+    : "Procurement Manager";
+  const userInitials = userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+
+  const handleLogout = async () => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api/v1";
+      const token = localStorage.getItem("accessToken");
+      
+      // Call backend logout
+      await fetch(`${apiUrl}/auth/logout`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+    } catch (err) {
+      console.error("Logout request error:", err);
+    }
+    
+    // Clear tokens and localStorage
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("user");
+    
+    // Redirect to login page
+    navigate("/login");
+  };
 
   return (
     <aside className="w-64 bg-sidebar border-r border-sidebar-border h-screen flex flex-col fixed left-0 top-0">
@@ -63,16 +100,24 @@ export default function Sidebar() {
         </nav>
       </div>
       
-      <div className="p-4 border-t border-sidebar-border">
-        <div className="flex items-center gap-3 px-3 py-2">
-          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-medium">
-            JD
+      <div className="p-4 border-t border-sidebar-border flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold text-sm">
+            {userInitials}
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-slate-900">John Doe</span>
-            <span className="text-xs text-slate-500">Procurement Manager</span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-medium text-slate-900 truncate">{userName}</span>
+            <span className="text-xs text-slate-500 truncate">{userRole}</span>
           </div>
         </div>
+        <button
+          onClick={handleLogout}
+          className="text-slate-400 hover:text-destructive transition-colors p-1.5 rounded-md hover:bg-slate-50"
+          title="Log Out"
+          id="logout-btn"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
     </aside>
   );
