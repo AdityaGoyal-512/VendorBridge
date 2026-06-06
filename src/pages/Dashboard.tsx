@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,30 +29,94 @@ import {
   PlusCircle,
   AlertCircle
 } from 'lucide-react';
+import { api, Vendor, RFQ, Invoice, ActivityLog } from '@/lib/api';
 
 export default function Dashboard() {
   const navigate = useNavigate();
 
-  // Mock data for the dashboard stats and lists
-  const recentRFQs = [
-    { id: 'RFQ-2026-089', title: 'Q3 Office Equipment', department: 'Operations', deadline: '2026-06-15', bids: 3, status: 'open' },
-    { id: 'RFQ-2026-092', title: 'Facility Maintenance Services', department: 'Facilities', deadline: '2026-06-12', bids: 1, status: 'open' },
-    { id: 'RFQ-2026-090', title: 'Server Upgrade Components', department: 'IT', deadline: '2026-06-10', bids: 5, status: 'closed' },
-  ];
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [rfqs, setRfqs] = useState<RFQ[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [activities, setActivities] = useState<ActivityLog[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const recentInvoices = [
-    { id: 'INV-2026-894', poId: 'PO-2026-002', vendor: 'Office Essentials', amount: '$1,200.00', dueDate: '2026-06-01', status: 'overdue' },
-    { id: 'INV-2026-893', poId: 'PO-2026-003', vendor: 'Global Logistics', amount: '$8,950.00', dueDate: '2026-06-15', status: 'pending' },
-    { id: 'INV-2026-892', poId: 'PO-2026-004', vendor: 'Delta Systems', amount: '$12,400.00', dueDate: '2026-07-02', status: 'paid' },
-  ];
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [vList, rList, iList, aList] = await Promise.all([
+          api.getVendors(),
+          api.getRFQs(),
+          api.getInvoices(),
+          api.getActivityLogs()
+        ]);
+        setVendors(vList || []);
+        setRfqs(rList || []);
+        setInvoices(iList || []);
+        setActivities(aList || []);
+      } catch (err) {
+        console.error('Error loading dashboard data:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
 
-  const recentActivity = [
-    { id: 1, user: 'Jane Smith', action: 'Approved Purchase Order', target: 'PO-2026-004', time: '10 minutes ago', type: 'success' },
-    { id: 2, user: 'John Doe', action: 'Created new RFQ', target: 'RFQ-2026-092', time: '1 hour ago', type: 'create' },
-    { id: 3, user: 'System', action: 'Auto-flagged Invoice', target: 'INV-2026-894', time: '2 hours ago', type: 'alert' },
-    { id: 4, user: 'Alice Johnson', action: 'Added new Vendor', target: 'Prime Manufacturing', time: 'Yesterday', type: 'create' },
-    { id: 5, user: 'Bob Wilson', action: 'Approved Quotation', target: 'QT-2026-105', time: 'Yesterday', type: 'success' },
-  ];
+  const activeVendors = vendors.filter(v => v.status === 'active').length;
+  const reviewVendors = vendors.filter(v => v.status !== 'active').length;
+
+  const activeRfqsCount = rfqs.filter(r => r.status === 'published').length;
+  
+  const totalPaidSpend = invoices
+    .filter(inv => inv.status === 'paid')
+    .reduce((sum, inv) => sum + inv.totalAmount, 0);
+
+  const pendingPosCount = invoices.filter(inv => inv.status === 'pending').length;
+
+  const recentRFQs = rfqs.slice(0, 5).map(rfq => ({
+    id: rfq._id.slice(-8).toUpperCase(),
+    title: rfq.title,
+    department: rfq.productName || 'Procurement',
+    bids: rfq.assignedVendors ? rfq.assignedVendors.length : 0,
+    status: rfq.status === 'published' ? 'open' : rfq.status,
+    deadline: rfq.deadline ? new Date(rfq.deadline).toLocaleDateString() : 'N/A'
+  }));
+
+  const recentInvoices = invoices.slice(0, 5).map(inv => {
+    const vendorName = typeof inv.vendorId === 'object' && inv.vendorId ? (inv.vendorId as any).name : 'Unknown';
+    return {
+      id: inv.invoiceNumber,
+      poId: typeof inv.poId === 'object' && inv.poId ? (inv.poId as any).poNumber : 'PO-UNKNOWN',
+      vendor: vendorName,
+      amount: `$${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      dueDate: inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'N/A',
+      status: inv.status
+    };
+  });
+
+  const recentActivity = activities.slice(0, 5).map((act, index) => {
+    const userName = typeof act.userId === 'object' && act.userId ? (act.userId as any).name : 'System';
+    const timeStr = act.createdAt ? new Date(act.createdAt).toLocaleDateString() + ' ' + new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now';
+    let type: 'success' | 'create' | 'alert' = 'create';
+    if (act.module === 'po' || act.module === 'approval') type = 'success';
+    if (act.module === 'invoice' && act.action.includes('flag')) type = 'alert';
+    return {
+      id: act._id || index,
+      user: userName,
+      action: act.action,
+      target: act.targetId ? act.targetId.slice(-8).toUpperCase() : '',
+      time: timeStr,
+      type
+    };
+  });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -88,18 +153,18 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="pt-2">
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold tracking-tight text-slate-900">142</span>
+              <span className="text-3xl font-bold tracking-tight text-slate-900">{vendors.length}</span>
               <span className="text-xs font-semibold text-success flex items-center bg-success/10 px-1.5 py-0.5 rounded">
                 <TrendingUp className="h-3 w-3 mr-0.5" />
-                +8%
+                Live
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-success"></span>
-              128 active
+              {activeVendors} active
               <span className="text-slate-300">|</span>
               <span className="w-1.5 h-1.5 rounded-full bg-warning"></span>
-              14 review
+              {reviewVendors} review
             </p>
           </CardContent>
         </Card>
@@ -114,39 +179,36 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="pt-2">
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold tracking-tight text-slate-900">12</span>
+              <span className="text-3xl font-bold tracking-tight text-slate-900">{activeRfqsCount}</span>
               <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                32 bids
+                {rfqs.reduce((sum, r) => sum + (r.assignedVendors ? r.assignedVendors.length : 0), 0)} bids
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
-              <Clock className="h-3 w-3 text-danger" />
-              <span className="text-danger font-medium">4 closing this week</span>
+              <Clock className="h-3 w-3 text-slate-400" />
+              <span>Database Sync</span>
             </p>
           </CardContent>
         </Card>
 
         {/* Pending Approvals */}
-        <Card className="hover:shadow-md hover:-translate-y-1 transition-all duration-300 border-slate-100 cursor-pointer group" onClick={() => navigate('/approvals')}>
+        <Card className="hover:shadow-md hover:-translate-y-1 transition-all duration-300 border-slate-100 cursor-pointer group" onClick={() => navigate('/invoices')}>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 group-hover:text-primary transition-colors">Pending Approvals</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 group-hover:text-primary transition-colors">Pending Invoices</span>
             <div className="p-2 rounded-lg bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors duration-300">
               <CheckSquare className="h-5 w-5" />
             </div>
           </CardHeader>
           <CardContent className="pt-2">
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold tracking-tight text-slate-900">8</span>
+              <span className="text-3xl font-bold tracking-tight text-slate-900">{pendingPosCount}</span>
               <span className="text-xs font-semibold text-warning bg-warning/10 px-1.5 py-0.5 rounded">
-                Urgent
+                Review
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-              3 POs
-              <span className="text-slate-300">|</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-              5 Quotations
+              Requires attention
             </p>
           </CardContent>
         </Card>
@@ -154,21 +216,22 @@ export default function Dashboard() {
         {/* Monthly Spend */}
         <Card className="hover:shadow-md hover:-translate-y-1 transition-all duration-300 border-slate-100 cursor-pointer group" onClick={() => navigate('/reports')}>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 group-hover:text-primary transition-colors">Monthly Spend</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 group-hover:text-primary transition-colors">Total Paid Spend</span>
             <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors duration-300">
               <DollarSign className="h-5 w-5" />
             </div>
           </CardHeader>
           <CardContent className="pt-2">
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold tracking-tight text-slate-900">$45,200</span>
+              <span className="text-2xl font-bold tracking-tight text-slate-900">
+                {"$" + totalPaidSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
               <span className="text-xs font-semibold text-success flex items-center bg-success/10 px-1.5 py-0.5 rounded">
-                <TrendingDown className="h-3 w-3 mr-0.5" />
-                -2.4%
+                Live
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
-              <span className="font-semibold text-slate-600">78%</span> of monthly budget utilized
+              From settled invoices
             </p>
           </CardContent>
         </Card>

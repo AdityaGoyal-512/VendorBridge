@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,6 @@ import {
 import { 
   Search, 
   Filter, 
-  MoreHorizontal, 
   ShoppingCart, 
   Plus, 
   ArrowLeft, 
@@ -21,99 +20,20 @@ import {
   Trash2, 
   CheckCircle2, 
   Clock, 
-  Truck, 
-  Package, 
-  CheckSquare, 
-  AlertCircle,
-  Building,
-  Calendar,
-  DollarSign,
-  Printer
+  Building, 
+  Calendar, 
+  DollarSign, 
+  Printer,
+  AlertCircle
 } from 'lucide-react';
-
-interface POItem {
-  name: string;
-  qty: number;
-  price: number;
-}
-
-interface PO {
-  id: string;
-  vendor: string;
-  date: string;
-  delivery: string;
-  status: 'draft' | 'pending' | 'approved' | 'shipped' | 'delivered';
-  items: POItem[];
-}
-
-const initialPOs: PO[] = [
-  { 
-    id: 'PO-2026-001', 
-    vendor: 'TechCorp Supplies', 
-    date: '2026-06-05', 
-    delivery: '2026-06-15', 
-    status: 'pending',
-    items: [
-      { name: 'Developer Laptops (16GB RAM)', qty: 3, price: 1200.00 },
-      { name: 'UltraWide Monitors 34"', qty: 2, price: 450.00 }
-    ]
-  },
-  { 
-    id: 'PO-2026-002', 
-    vendor: 'Office Essentials', 
-    date: '2026-06-04', 
-    delivery: '2026-06-10', 
-    status: 'approved',
-    items: [
-      { name: 'Ergonomic Desk Chairs', qty: 5, price: 180.00 },
-      { name: 'A4 Printing Paper (Boxes)', qty: 8, price: 15.00 }
-    ]
-  },
-  { 
-    id: 'PO-2026-003', 
-    vendor: 'Global Logistics', 
-    date: '2026-06-03', 
-    delivery: '2026-06-08', 
-    status: 'shipped',
-    items: [
-      { name: 'Ocean Freight Shipping Fee', qty: 1, price: 7584.75 }
-    ]
-  },
-  { 
-    id: 'PO-2026-004', 
-    vendor: 'Delta Systems', 
-    date: '2026-06-02', 
-    delivery: '2026-06-05', 
-    status: 'delivered',
-    items: [
-      { name: 'Enterprise SaaS License (1 Year)', qty: 1, price: 10508.47 }
-    ]
-  },
-  { 
-    id: 'PO-2026-005', 
-    vendor: 'Prime Manufacturing', 
-    date: '2026-06-06', 
-    delivery: '2026-06-25', 
-    status: 'draft',
-    items: [
-      { name: 'Industrial Grade Steel Rods', qty: 25, price: 400.00 },
-      { name: 'Coupling Joints (Pack of 50)', qty: 10, price: 271.18 }
-    ]
-  },
-];
-
-const VENDORS = [
-  'TechCorp Supplies',
-  'Office Essentials',
-  'Global Logistics',
-  'Delta Systems',
-  'Prime Manufacturing'
-];
+import { api, PurchaseOrder, Vendor, POItem as ApiPOItem } from '@/lib/api';
 
 export default function PurchaseOrders() {
-  const [posList, setPosList] = useState<PO[]>(initialPOs);
+  const [posList, setPosList] = useState<PurchaseOrder[]>([]);
+  const [vendorsList, setVendorsList] = useState<Vendor[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState<'list' | 'create' | 'details'>('list');
-  const [selectedPO, setSelectedPO] = useState<PO | null>(null);
+  const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
   
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
@@ -121,13 +41,46 @@ export default function PurchaseOrders() {
 
   // New PO Form State
   const [newPoNumber, setNewPoNumber] = useState('');
-  const [selectedVendor, setSelectedVendor] = useState(VENDORS[0]);
+  const [selectedVendorId, setSelectedVendorId] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
-  const [formItems, setFormItems] = useState<POItem[]>([{ name: '', qty: 1, price: 0 }]);
+  const [formItems, setFormItems] = useState<{ name: string; qty: number; price: number }[]>([{ name: '', qty: 1, price: 0 }]);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [pos, vends] = await Promise.all([
+          api.getPurchaseOrders(),
+          api.getVendors()
+        ]);
+        setPosList(pos || []);
+        setVendorsList(vends || []);
+        if (vends && vends.length > 0) {
+          setSelectedVendorId(vends[0]._id);
+        }
+      } catch (err) {
+        console.error('Error loading PO data:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  const getVendorName = (po: PurchaseOrder) => {
+    if (typeof po.vendorId === 'object' && po.vendorId) {
+      return po.vendorId.name;
+    }
+    const found = vendorsList.find(v => v._id === po.vendorId);
+    return found ? found.name : 'Unknown Vendor';
+  };
 
   // Calculations helper
-  const calculateTotals = (items: POItem[]) => {
-    const subtotal = items.reduce((sum, item) => sum + (item.qty * item.price), 0);
+  const calculateTotals = (items: { name: string; qty: number; price: number }[] | ApiPOItem[]) => {
+    const subtotal = items.reduce((sum, item) => {
+      const q = 'qty' in item ? item.qty : item.quantity;
+      const p = 'price' in item ? item.price : item.unitPrice;
+      return sum + (q * p);
+    }, 0);
     const tax = subtotal * 0.18; // 18% VAT/Tax
     const total = subtotal + tax;
     return {
@@ -155,7 +108,7 @@ export default function PurchaseOrders() {
   };
 
   // Update Item value
-  const handleItemChange = (index: number, field: keyof POItem, value: string | number) => {
+  const handleItemChange = (index: number, field: 'name' | 'qty' | 'price', value: string | number) => {
     const updated = [...formItems];
     if (field === 'qty') {
       updated[index].qty = Math.max(1, parseInt(value as string) || 1);
@@ -171,8 +124,9 @@ export default function PurchaseOrders() {
   const startCreatePO = () => {
     const nextNum = `PO-2026-${String(posList.length + 1).padStart(3, '0')}`;
     setNewPoNumber(nextNum);
-    setSelectedVendor(VENDORS[0]);
-    // Default delivery date to 10 days from now
+    if (vendorsList.length > 0) {
+      setSelectedVendorId(vendorsList[0]._id);
+    }
     const delivery = new Date();
     delivery.setDate(delivery.getDate() + 10);
     setDeliveryDate(delivery.toISOString().split('T')[0]);
@@ -181,80 +135,104 @@ export default function PurchaseOrders() {
   };
 
   // Submit/Generate PO
-  const handleGeneratePO = (e: React.FormEvent) => {
+  const handleGeneratePO = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Validate items
     const validItems = formItems.filter(item => item.name.trim() !== '' && item.price > 0);
     if (validItems.length === 0) {
       alert('Please add at least one valid item with name and price.');
       return;
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const newPO: PO = {
-      id: newPoNumber || `PO-2026-${String(posList.length + 1).padStart(3, '0')}`,
-      vendor: selectedVendor,
-      date: todayStr,
-      delivery: deliveryDate,
-      status: 'pending', // Starts as pending for workflow
-      items: validItems
+    const { subtotal, tax, total } = calculateTotals(validItems);
+
+    const payload: Partial<PurchaseOrder> = {
+      poNumber: newPoNumber || `PO-2026-${String(posList.length + 1).padStart(3, '0')}`,
+      quotationId: '60d5ec493b8d4f4e7c756b1a', // mock reference
+      vendorId: selectedVendorId,
+      items: validItems.map(it => ({
+        productName: it.name,
+        quantity: it.qty,
+        unitPrice: it.price,
+        total: it.qty * it.price
+      })),
+      taxPercent: 18,
+      taxAmount: parseFloat(tax),
+      subtotal: parseFloat(subtotal),
+      totalAmount: parseFloat(total),
+      status: 'pending' // pending for workflow
     };
 
-    setPosList([newPO, ...posList]);
-    setSelectedPO(newPO);
-    setActiveView('details');
+    try {
+      const created = await api.createPurchaseOrder(payload);
+      setPosList([created, ...posList]);
+      setSelectedPO(created);
+      setActiveView('details');
+      
+      // Log event
+      await api.createActivityLog({
+        action: `Generated Purchase Order ${created.poNumber}`,
+        module: 'po',
+        targetId: created._id,
+        targetModel: 'PurchaseOrder'
+      });
+    } catch (err) {
+      console.error('Error generating PO:', err);
+      alert('Failed to generate PO: ' + err);
+    }
   };
 
   // Advance workflow status for tracking
-  const advancePOStatus = (poId: string) => {
-    const statusWorkflow: PO['status'][] = ['draft', 'pending', 'approved', 'shipped', 'delivered'];
+  const advancePOStatus = async (poId: string) => {
+    const statusWorkflow: PurchaseOrder['status'][] = ['draft', 'pending', 'approved', 'shipped', 'delivered'];
+    if (!selectedPO) return;
     
-    setPosList(prev => prev.map(po => {
-      if (po.id === poId) {
-        const currentIndex = statusWorkflow.indexOf(po.status);
-        const nextIndex = Math.min(currentIndex + 1, statusWorkflow.length - 1);
-        const updatedPO = { ...po, status: statusWorkflow[nextIndex] };
-        
-        // Keep selectedPO synchronized
-        if (selectedPO?.id === poId) {
-          setSelectedPO(updatedPO);
-        }
-        return updatedPO;
-      }
-      return po;
-    }));
+    const currentIndex = statusWorkflow.indexOf(selectedPO.status);
+    const nextStatus = statusWorkflow[Math.min(currentIndex + 1, statusWorkflow.length - 1)];
+
+    try {
+      const updated = await api.updatePurchaseOrder(poId, { status: nextStatus });
+      setPosList(prev => prev.map(po => po._id === poId ? updated : po));
+      setSelectedPO(updated);
+
+      await api.createActivityLog({
+        action: `Approved/Updated PO ${updated.poNumber} status to ${nextStatus}`,
+        module: 'po',
+        targetId: updated._id,
+        targetModel: 'PurchaseOrder'
+      });
+    } catch (err) {
+      console.error('Error updating PO status:', err);
+    }
   };
 
   // Decline / Revert PO
-  const cancelPO = (poId: string) => {
-    setPosList(prev => prev.map(po => {
-      if (po.id === poId) {
-        const updatedPO = { ...po, status: 'draft' as const };
-        if (selectedPO?.id === poId) {
-          setSelectedPO(updatedPO);
-        }
-        return updatedPO;
-      }
-      return po;
-    }));
+  const cancelPO = async (poId: string) => {
+    try {
+      const updated = await api.updatePurchaseOrder(poId, { status: 'draft' });
+      setPosList(prev => prev.map(po => po._id === poId ? updated : po));
+      setSelectedPO(updated);
+    } catch (err) {
+      console.error('Error reverting PO:', err);
+    }
   };
 
   // Mock PDF Download
-  const handleDownloadPDF = (po: PO) => {
+  const handleDownloadPDF = (po: PurchaseOrder) => {
     const { subtotal, tax, total } = calculateTotals(po.items);
+    const vendorName = getVendorName(po);
+    const dateStr = po.createdAt ? new Date(po.createdAt).toLocaleDateString() : 'N/A';
     
     const voucherText = `
 ==================================================
               PURCHASE ORDER VOUCHER
 ==================================================
-PO Number     : ${po.id}
-Vendor Name   : ${po.vendor}
-Date Issued   : ${po.date}
-Est. Delivery : ${po.delivery}
+PO Number     : ${po.poNumber}
+Vendor Name   : ${vendorName}
+Date Issued   : ${dateStr}
 Status        : ${po.status.toUpperCase()}
 --------------------------------------------------
 ITEMS LISTED:
-${po.items.map((item, idx) => `${idx + 1}. ${item.name.padEnd(30)} x${String(item.qty).padEnd(3)} @ ${formatCurrency(item.price)}`).join('\n')}
+${po.items.map((item, idx) => `${idx + 1}. ${item.productName.padEnd(30)} x${String(item.quantity).padEnd(3)} @ ${formatCurrency(item.unitPrice)}`).join('\n')}
 --------------------------------------------------
 Subtotal      : ${formatCurrency(subtotal)}
 Tax (18% VAT) : ${formatCurrency(tax)}
@@ -267,7 +245,7 @@ Generated via VendorBridge. All rights reserved.
     const element = document.createElement("a");
     const file = new Blob([voucherText], {type: 'text/plain'});
     element.href = URL.createObjectURL(file);
-    element.download = `${po.id}_PurchaseOrder.txt`;
+    element.download = `${po.poNumber}_PurchaseOrder.txt`;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
@@ -275,11 +253,20 @@ Generated via VendorBridge. All rights reserved.
 
   // Filter list
   const filteredPOs = posList.filter(po => {
-    const matchesSearch = po.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          po.vendor.toLowerCase().includes(searchTerm.toLowerCase());
+    const vendorName = getVendorName(po);
+    const matchesSearch = po.poNumber.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          vendorName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || po.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in pb-12">
@@ -366,21 +353,24 @@ Generated via VendorBridge. All rights reserved.
                 ) : (
                   filteredPOs.map((po) => {
                     const { total } = calculateTotals(po.items);
-                    const itemsCount = po.items.reduce((acc, it) => acc + it.qty, 0);
+                    const itemsCount = po.items.reduce((acc, it) => acc + it.quantity, 0);
+                    const vendorName = getVendorName(po);
+                    const dateStr = po.createdAt ? new Date(po.createdAt).toLocaleDateString() : 'N/A';
+                    const deliveryStr = po.createdAt ? new Date(new Date(po.createdAt).getTime() + 10 * 24 * 60 * 60 * 1000).toLocaleDateString() : 'N/A';
                     return (
-                      <TableRow key={po.id} className="hover:bg-slate-50/40 transition-colors">
+                      <TableRow key={po._id} className="hover:bg-slate-50/40 transition-colors">
                         <TableCell className="pl-6 font-semibold text-slate-900 flex items-center gap-2">
                           <ShoppingCart className="w-4 h-4 text-slate-400" />
-                          {po.id}
+                          {po.poNumber}
                         </TableCell>
                         <TableCell className="font-semibold text-primary hover:underline cursor-pointer" onClick={() => {
                           setSelectedPO(po);
                           setActiveView('details');
                         }}>
-                          {po.vendor}
+                          {vendorName}
                         </TableCell>
-                        <TableCell className="text-slate-600 text-sm">{po.date}</TableCell>
-                        <TableCell className="text-slate-600 text-sm">{po.delivery}</TableCell>
+                        <TableCell className="text-slate-600 text-sm">{dateStr}</TableCell>
+                        <TableCell className="text-slate-600 text-sm">{deliveryStr}</TableCell>
                         <TableCell className="text-right font-medium text-slate-700">{itemsCount} units</TableCell>
                         <TableCell className="text-right font-bold text-slate-950">{formatCurrency(total)}</TableCell>
                         <TableCell className="pl-8">
@@ -456,12 +446,12 @@ Generated via VendorBridge. All rights reserved.
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">Select Vendor</label>
                     <select
-                      value={selectedVendor}
-                      onChange={(e) => setSelectedVendor(e.target.value)}
+                      value={selectedVendorId}
+                      onChange={(e) => setSelectedVendorId(e.target.value)}
                       className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-medium"
                     >
-                      {VENDORS.map((v) => (
-                        <option key={v} value={v}>{v}</option>
+                      {vendorsList.map((v) => (
+                        <option key={v._id} value={v._id}>{v.name}</option>
                       ))}
                     </select>
                   </div>
@@ -608,10 +598,10 @@ Generated via VendorBridge. All rights reserved.
                 </div>
                 <div className="sm:text-right">
                   <h2 className="text-xl font-bold tracking-tight text-slate-900">PURCHASE ORDER</h2>
-                  <div className="text-primary text-lg font-bold mt-1">{selectedPO.id}</div>
+                  <div className="text-primary text-lg font-bold mt-1">{selectedPO.poNumber}</div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Date Issued: <strong className="text-slate-700">{selectedPO.date}</strong><br />
-                    Est. Delivery: <strong className="text-slate-700">{selectedPO.delivery}</strong>
+                    Date Issued: <strong className="text-slate-700">{selectedPO.createdAt ? new Date(selectedPO.createdAt).toLocaleDateString() : 'N/A'}</strong><br />
+                    Est. Delivery: <strong className="text-slate-700">{selectedPO.createdAt ? new Date(new Date(selectedPO.createdAt).getTime() + 10 * 24 * 60 * 60 * 1000).toLocaleDateString() : 'N/A'}</strong>
                   </p>
                 </div>
               </div>
@@ -622,10 +612,10 @@ Generated via VendorBridge. All rights reserved.
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1">
                     <Building className="w-3.5 h-3.5" /> Vendor Information
                   </h4>
-                  <div className="font-bold text-slate-900 text-sm">{selectedPO.vendor}</div>
+                  <div className="font-bold text-slate-900 text-sm">{getVendorName(selectedPO)}</div>
                   <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    Registered Vendor ID: VB-{selectedPO.vendor.replace(/\s+/g, '').substring(0, 5).toUpperCase()}<br />
-                    Contact: accounts@{selectedPO.vendor.toLowerCase().replace(/\s+/g, '')}.com
+                    Registered Vendor ID: VB-{getVendorName(selectedPO).replace(/\s+/g, '').substring(0, 5).toUpperCase()}<br />
+                    Contact: accounts@{getVendorName(selectedPO).toLowerCase().replace(/\s+/g, '')}.com
                   </p>
                 </div>
                 <div>
@@ -656,11 +646,11 @@ Generated via VendorBridge. All rights reserved.
                   <TableBody>
                     {selectedPO.items.map((item, idx) => (
                       <TableRow key={idx}>
-                        <TableCell className="pl-4 font-semibold text-slate-900 text-sm">{item.name}</TableCell>
-                        <TableCell className="text-right text-slate-600">{formatCurrency(item.price)}</TableCell>
-                        <TableCell className="text-center text-slate-900 font-medium">{item.qty}</TableCell>
+                        <TableCell className="pl-4 font-semibold text-slate-900 text-sm">{item.productName}</TableCell>
+                        <TableCell className="text-right text-slate-600">{formatCurrency(item.unitPrice)}</TableCell>
+                        <TableCell className="text-center text-slate-900 font-medium">{item.quantity}</TableCell>
                         <TableCell className="pr-4 text-right font-bold text-slate-950">
-                          {formatCurrency(item.qty * item.price)}
+                          {formatCurrency(item.quantity * item.unitPrice)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -695,7 +685,7 @@ Generated via VendorBridge. All rights reserved.
             <div className="bg-slate-50/70 border-t border-slate-100 p-4 flex flex-wrap justify-between items-center gap-3">
               <div className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full bg-primary animate-ping"></div>
-                ID: {selectedPO.id}
+                PO Number: {selectedPO.poNumber}
               </div>
               
               <div className="flex items-center gap-2">
@@ -828,7 +818,7 @@ Generated via VendorBridge. All rights reserved.
                   
                   {selectedPO.status !== 'delivered' ? (
                     <Button 
-                      onClick={() => advancePOStatus(selectedPO.id)} 
+                      onClick={() => advancePOStatus(selectedPO._id)} 
                       className="w-full bg-primary hover:bg-primary/95 text-white text-xs h-9 font-semibold"
                     >
                       {selectedPO.status === 'draft' && 'Submit for Review'}
@@ -845,7 +835,7 @@ Generated via VendorBridge. All rights reserved.
 
                   {['pending', 'approved', 'shipped'].includes(selectedPO.status) && (
                     <Button 
-                      onClick={() => cancelPO(selectedPO.id)} 
+                      onClick={() => cancelPO(selectedPO._id)} 
                       variant="ghost"
                       className="w-full border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs h-9"
                     >

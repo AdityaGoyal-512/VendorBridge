@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,93 +13,26 @@ import {
 import { 
   Search, 
   Filter, 
-  MoreHorizontal, 
   Receipt, 
   Plus, 
   ArrowLeft, 
   Download, 
   Printer, 
   Mail, 
-  Trash2, 
   AlertCircle, 
   Building, 
   Calendar, 
-  FileText, 
   Clock, 
   CheckCircle2, 
   Send
 } from 'lucide-react';
-
-interface InvoiceItem {
-  name: string;
-  qty: number;
-  price: number;
-}
-
-interface Invoice {
-  id: string;
-  poId: string;
-  vendor: string;
-  dueDate: string;
-  status: 'paid' | 'pending' | 'overdue' | 'processing';
-  items: InvoiceItem[];
-}
-
-const initialInvoices: Invoice[] = [
-  { 
-    id: 'INV-2026-892', 
-    poId: 'PO-2026-004', 
-    vendor: 'Delta Systems', 
-    dueDate: '2026-07-02', 
-    status: 'paid',
-    items: [
-      { name: 'Enterprise SaaS License (1 Year)', qty: 1, price: 10508.47 }
-    ]
-  },
-  { 
-    id: 'INV-2026-893', 
-    poId: 'PO-2026-003', 
-    vendor: 'Global Logistics', 
-    dueDate: '2026-06-15', 
-    status: 'pending',
-    items: [
-      { name: 'Ocean Freight Shipping Fee', qty: 1, price: 7584.75 }
-    ]
-  },
-  { 
-    id: 'INV-2026-894', 
-    poId: 'PO-2026-002', 
-    vendor: 'Office Essentials', 
-    dueDate: '2026-06-01', 
-    status: 'overdue',
-    items: [
-      { name: 'Ergonomic Desk Chairs', qty: 5, price: 152.54 },
-      { name: 'A4 Printing Paper (Boxes)', qty: 8, price: 31.78 }
-    ]
-  },
-  { 
-    id: 'INV-2026-895', 
-    poId: 'PO-2026-001', 
-    vendor: 'TechCorp Supplies', 
-    dueDate: '2026-07-05', 
-    status: 'processing',
-    items: [
-      { name: 'Developer Laptops (16GB RAM)', qty: 3, price: 1016.95 },
-      { name: 'UltraWide Monitors 34"', qty: 2, price: 381.36 }
-    ]
-  },
-];
-
-const VENDORS = [
-  'TechCorp Supplies',
-  'Office Essentials',
-  'Global Logistics',
-  'Delta Systems',
-  'Prime Manufacturing'
-];
+import { api, Invoice, PurchaseOrder, Vendor } from '@/lib/api';
 
 export default function Invoices() {
-  const [invoicesList, setInvoicesList] = useState<Invoice[]>(initialInvoices);
+  const [invoicesList, setInvoicesList] = useState<Invoice[]>([]);
+  const [vendorsList, setVendorsList] = useState<Vendor[]>([]);
+  const [posList, setPosList] = useState<PurchaseOrder[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState<'list' | 'create' | 'details'>('list');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   
@@ -109,10 +42,9 @@ export default function Invoices() {
 
   // New Invoice Form State
   const [newInvNumber, setNewInvNumber] = useState('');
-  const [poReference, setPoReference] = useState('');
-  const [selectedVendor, setSelectedVendor] = useState(VENDORS[0]);
+  const [poReferenceId, setPoReferenceId] = useState('');
+  const [selectedVendorId, setSelectedVendorId] = useState('');
   const [dueDate, setDueDate] = useState('');
-  const [formItems, setFormItems] = useState<InvoiceItem[]>([{ name: '', qty: 1, price: 0 }]);
 
   // Email Modal State
   const [emailModalOpen, setEmailModalOpen] = useState(false);
@@ -122,12 +54,69 @@ export default function Invoices() {
   const [emailSending, setEmailSending] = useState(false);
   const [emailSentSuccess, setEmailSentSuccess] = useState(false);
 
-  // Calculations helper (splits standard GST 18% into CGST 9% and SGST 9%)
-  const calculateGSTTotals = (items: InvoiceItem[]) => {
-    const subtotal = items.reduce((sum, item) => sum + (item.qty * item.price), 0);
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [invs, vends, pos] = await Promise.all([
+          api.getInvoices(),
+          api.getVendors(),
+          api.getPurchaseOrders()
+        ]);
+        setInvoicesList(invs || []);
+        setVendorsList(vends || []);
+        setPosList(pos || []);
+        if (vends && vends.length > 0) {
+          setSelectedVendorId(vends[0]._id);
+        }
+        if (pos && pos.length > 0) {
+          setPoReferenceId(pos[0]._id);
+        }
+      } catch (err) {
+        console.error('Error loading Invoices data:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  const getVendorName = (inv: Invoice) => {
+    if (typeof inv.vendorId === 'object' && inv.vendorId) {
+      return (inv.vendorId as any).name;
+    }
+    const found = vendorsList.find(v => v._id === inv.vendorId);
+    return found ? found.name : 'Unknown Vendor';
+  };
+
+  const getPoNumber = (inv: Invoice) => {
+    if (typeof inv.poId === 'object' && inv.poId) {
+      return (inv.poId as any).poNumber;
+    }
+    const found = posList.find(p => p._id === inv.poId);
+    return found ? found.poNumber : 'Unknown PO';
+  };
+
+  const getInvoiceItems = (inv: Invoice) => {
+    if (typeof inv.poId === 'object' && inv.poId && (inv.poId as any).items) {
+      return (inv.poId as any).items;
+    }
+    const foundPo = posList.find(p => p._id === (inv.poId as any));
+    if (foundPo && foundPo.items) {
+      return foundPo.items;
+    }
+    return [];
+  };
+
+  // Calculations helper
+  const calculateGSTTotals = (items: any[]) => {
+    const subtotal = items.reduce((sum, item) => {
+      const q = item.quantity || item.qty || 0;
+      const p = item.unitPrice || item.price || 0;
+      return sum + (q * p);
+    }, 0);
     const cgst = subtotal * 0.09; // 9% CGST
     const sgst = subtotal * 0.09; // 9% SGST
-    const totalTax = cgst + sgst; // 18% Total Tax
+    const totalTax = cgst + sgst;
     const grandTotal = subtotal + totalTax;
 
     return {
@@ -144,108 +133,131 @@ export default function Invoices() {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(numeric);
   };
 
-  // Add Item row in form
-  const addFormItem = () => {
-    setFormItems([...formItems, { name: '', qty: 1, price: 0 }]);
-  };
-
-  // Remove Item row in form
-  const removeFormItem = (index: number) => {
-    if (formItems.length > 1) {
-      setFormItems(formItems.filter((_, i) => i !== index));
-    }
-  };
-
-  // Update Item value
-  const handleItemChange = (index: number, field: keyof InvoiceItem, value: string | number) => {
-    const updated = [...formItems];
-    if (field === 'qty') {
-      updated[index].qty = Math.max(1, parseInt(value as string) || 1);
-    } else if (field === 'price') {
-      updated[index].price = Math.max(0, parseFloat(value as string) || 0);
-    } else {
-      updated[index].name = value as string;
-    }
-    setFormItems(updated);
-  };
-
   // Initialize New Form
   const startCreateInvoice = () => {
     const nextNum = `INV-2026-${String(invoicesList.length + 892).padStart(3, '0')}`;
     setNewInvNumber(nextNum);
-    setPoReference('PO-2026-005');
-    setSelectedVendor(VENDORS[0]);
+    if (posList.length > 0) {
+      setPoReferenceId(posList[0]._id);
+      setSelectedVendorId(posList[0].vendorId as string);
+    } else if (vendorsList.length > 0) {
+      setSelectedVendorId(vendorsList[0]._id);
+    }
     const due = new Date();
     due.setDate(due.getDate() + 30);
     setDueDate(due.toISOString().split('T')[0]);
-    setFormItems([{ name: '', qty: 1, price: 0 }]);
     setActiveView('create');
   };
 
   // Submit/Generate Invoice
-  const handleGenerateInvoice = (e: React.FormEvent) => {
+  const handleGenerateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
-    const validItems = formItems.filter(item => item.name.trim() !== '' && item.price > 0);
-    if (validItems.length === 0) {
-      alert('Please add at least one valid item with name and price.');
+    const po = posList.find(p => p._id === poReferenceId);
+    if (!po) {
+      alert('Selected Purchase Order not found.');
       return;
     }
 
-    const newInvoice: Invoice = {
-      id: newInvNumber || `INV-2026-${String(invoicesList.length + 892).padStart(3, '0')}`,
-      poId: poReference,
-      vendor: selectedVendor,
-      dueDate: dueDate,
-      status: 'pending',
-      items: validItems
+    const { subtotal, cgst, sgst, grandTotal } = calculateGSTTotals(po.items);
+
+    const payload = {
+      invoiceNumber: newInvNumber || `INV-2026-${String(invoicesList.length + 892).padStart(3, '0')}`,
+      poId: po._id,
+      vendorId: typeof po.vendorId === 'object' && po.vendorId ? (po.vendorId as any)._id : po.vendorId,
+      gstBreakdown: {
+        cgst: parseFloat(cgst),
+        sgst: parseFloat(sgst),
+        igst: 0
+      },
+      subtotal: parseFloat(subtotal),
+      totalAmount: parseFloat(grandTotal),
+      status: 'pending' as const,
+      emailSent: false,
+      dueDate: dueDate
     };
 
-    setInvoicesList([newInvoice, ...invoicesList]);
-    setSelectedInvoice(newInvoice);
-    setActiveView('details');
+    try {
+      const created = await api.createInvoice(payload);
+      setInvoicesList([created, ...invoicesList]);
+      setSelectedInvoice(created);
+      setActiveView('details');
+
+      await api.createActivityLog({
+        action: `Generated Invoice ${created.invoiceNumber}`,
+        module: 'invoice',
+        targetId: created._id,
+        targetModel: 'Invoice'
+      });
+    } catch (err) {
+      console.error('Error generating invoice:', err);
+      alert('Failed to generate invoice: ' + err);
+    }
   };
 
   // Set up Email Modal fields
   const triggerEmailModal = (inv: Invoice) => {
-    const totals = calculateGSTTotals(inv.items);
-    setRecipientEmail(`billing@${inv.vendor.toLowerCase().replace(/\s+/g, '')}.com`);
-    setEmailSubject(`Invoice ${inv.id} payment reminder - VendorBridge`);
-    setEmailBody(`Dear accounts team at ${inv.vendor},\n\nThis is a notification regarding invoice ${inv.id} linked to PO reference ${inv.poId} which has a due date of ${inv.dueDate}.\n\nThe total payable amount including CGST (9%) and SGST (9%) calculations is ${formatCurrency(totals.grandTotal)}.\n\nPlease confirm receipt of invoice and initiate payment.\n\nBest regards,\nProcurement Department\nVendorBridge Corp.`);
+    const items = getInvoiceItems(inv);
+    const totals = calculateGSTTotals(items);
+    const vendorName = getVendorName(inv);
+    const poNum = getPoNumber(inv);
+    setRecipientEmail(`billing@${vendorName.toLowerCase().replace(/\s+/g, '')}.com`);
+    setEmailSubject(`Invoice ${inv.invoiceNumber} payment reminder - VendorBridge`);
+    setEmailBody(`Dear accounts team at ${vendorName},\n\nThis is a notification regarding invoice ${inv.invoiceNumber} linked to PO reference ${poNum} which has a due date of ${inv.dueDate || 'N/A'}.\n\nThe total payable amount including CGST (9%) and SGST (9%) calculations is ${formatCurrency(totals.grandTotal)}.\n\nPlease confirm receipt of invoice and initiate payment.\n\nBest regards,\nProcurement Department\nVendorBridge Corp.`);
     setEmailSentSuccess(false);
     setEmailModalOpen(true);
   };
 
   // Simulate Email Dispatch
-  const handleSendEmailSubmit = (e: React.FormEvent) => {
+  const handleSendEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedInvoice) return;
     setEmailSending(true);
-    setTimeout(() => {
+    
+    try {
+      const updated = await api.updateInvoice(selectedInvoice._id, { emailSent: true });
+      setInvoicesList(prev => prev.map(inv => inv._id === selectedInvoice._id ? updated : inv));
+      setSelectedInvoice(updated);
+      
       setEmailSending(false);
       setEmailSentSuccess(true);
       setTimeout(() => {
         setEmailModalOpen(false);
         setEmailSentSuccess(false);
       }, 1500);
-    }, 1200);
+
+      await api.createActivityLog({
+        action: `Emailed payment reminder for Invoice ${updated.invoiceNumber}`,
+        module: 'invoice',
+        targetId: updated._id,
+        targetModel: 'Invoice'
+      });
+    } catch (err) {
+      console.error('Error sending email:', err);
+      setEmailSending(false);
+    }
   };
 
   // Mock plain-text download
   const handleDownloadInvoice = (inv: Invoice) => {
-    const totals = calculateGSTTotals(inv.items);
+    const items = getInvoiceItems(inv);
+    const totals = calculateGSTTotals(items);
+    const vendorName = getVendorName(inv);
+    const poNum = getPoNumber(inv);
+    const dateStr = inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : 'N/A';
     
     const voucherText = `
 ==================================================
               INVOICE VOUCHER DETAILS
 ==================================================
-Invoice ID    : ${inv.id}
-PO Reference  : ${inv.poId}
-Vendor Name   : ${inv.vendor}
+Invoice ID    : ${inv.invoiceNumber}
+PO Reference  : ${poNum}
+Vendor Name   : ${vendorName}
 Due Date      : ${inv.dueDate}
 Status        : ${inv.status.toUpperCase()}
 --------------------------------------------------
 TAX CODE GST BREAKDOWN:
 Item descriptions and costs:
-${inv.items.map((item, idx) => `${idx + 1}. ${item.name.padEnd(25)} x${String(item.qty).padEnd(2)} @ ${formatCurrency(item.price)}`).join('\n')}
+${items.map((item: any, idx: number) => `${idx + 1}. ${(item.productName || '').padEnd(25)} x${String(item.quantity || 0).padEnd(2)} @ ${formatCurrency(item.unitPrice || 0)}`).join('\n')}
 --------------------------------------------------
 Subtotal      : ${formatCurrency(totals.subtotal)}
 CGST (9.0%)   : ${formatCurrency(totals.cgst)}
@@ -262,7 +274,7 @@ Thank you for doing business with VendorBridge.
     const element = document.createElement("a");
     const file = new Blob([voucherText], {type: 'text/plain'});
     element.href = URL.createObjectURL(file);
-    element.download = `${inv.id}_Invoice.txt`;
+    element.download = `${inv.invoiceNumber}_Invoice.txt`;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
@@ -270,12 +282,22 @@ Thank you for doing business with VendorBridge.
 
   // Filter List
   const filteredInvoices = invoicesList.filter(inv => {
-    const matchesSearch = inv.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          inv.vendor.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          inv.poId.toLowerCase().includes(searchTerm.toLowerCase());
+    const vendorName = getVendorName(inv);
+    const poNum = getPoNumber(inv);
+    const matchesSearch = inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          vendorName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          poNum.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || inv.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in pb-12">
@@ -313,7 +335,7 @@ Thank you for doing business with VendorBridge.
                   {formatCurrency(
                     invoicesList
                       .filter((i) => i.status === 'pending' || i.status === 'overdue')
-                      .reduce((sum, i) => sum + parseFloat(calculateGSTTotals(i.items).grandTotal), 0)
+                      .reduce((sum, i) => sum + parseFloat(calculateGSTTotals(getInvoiceItems(i)).grandTotal), 0)
                   )}
                 </div>
               </CardContent>
@@ -327,7 +349,7 @@ Thank you for doing business with VendorBridge.
                   {formatCurrency(
                     invoicesList
                       .filter((i) => i.status === 'overdue')
-                      .reduce((sum, i) => sum + parseFloat(calculateGSTTotals(i.items).grandTotal), 0)
+                      .reduce((sum, i) => sum + parseFloat(calculateGSTTotals(getInvoiceItems(i)).grandTotal), 0)
                   )}
                 </div>
               </CardContent>
@@ -339,7 +361,7 @@ Thank you for doing business with VendorBridge.
               <CardContent>
                 <div className="text-2xl font-extrabold text-primary">
                   {formatCurrency(
-                    invoicesList.reduce((sum, i) => sum + parseFloat(calculateGSTTotals(i.items).totalTax), 0)
+                    invoicesList.reduce((sum, i) => sum + parseFloat(calculateGSTTotals(getInvoiceItems(i)).totalTax), 0)
                   )}
                 </div>
               </CardContent>
@@ -406,18 +428,24 @@ Thank you for doing business with VendorBridge.
                     </TableRow>
                   ) : (
                     filteredInvoices.map((inv) => {
-                      const totals = calculateGSTTotals(inv.items);
+                      const items = getInvoiceItems(inv);
+                      const totals = calculateGSTTotals(items);
+                      const vendorName = getVendorName(inv);
+                      const poNum = getPoNumber(inv);
                       return (
-                        <TableRow key={inv.id} className="hover:bg-slate-50/40 transition-colors">
+                        <TableRow key={inv._id} className="hover:bg-slate-50/40 transition-colors">
                           <TableCell className="pl-6 font-semibold text-slate-900 flex items-center gap-2">
                             <Receipt className="w-4 h-4 text-slate-400" />
-                            {inv.id}
+                            {inv.invoiceNumber}
                           </TableCell>
-                          <TableCell className="font-semibold text-primary hover:underline cursor-pointer">
-                            {inv.poId}
+                          <TableCell className="font-semibold text-primary hover:underline cursor-pointer" onClick={() => {
+                            setSelectedInvoice(inv);
+                            setActiveView('details');
+                          }}>
+                            {poNum}
                           </TableCell>
-                          <TableCell className="font-medium text-slate-800">{inv.vendor}</TableCell>
-                          <TableCell className={`text-sm ${inv.status === 'overdue' ? 'text-danger font-semibold' : 'text-slate-600'}`}>{inv.dueDate}</TableCell>
+                          <TableCell className="font-medium text-slate-800">{vendorName}</TableCell>
+                          <TableCell className={`text-sm ${inv.status === 'overdue' ? 'text-danger font-semibold' : 'text-slate-600'}`}>{inv.dueDate || 'N/A'}</TableCell>
                           <TableCell className="text-right font-semibold text-slate-600">{formatCurrency(totals.totalTax)}</TableCell>
                           <TableCell className="text-right font-extrabold text-slate-950">{formatCurrency(totals.grandTotal)}</TableCell>
                           <TableCell className="pl-8">
@@ -474,7 +502,7 @@ Thank you for doing business with VendorBridge.
           <Card className="lg:col-span-2 border-slate-100 shadow-sm">
             <CardHeader className="border-b border-slate-100">
               <CardTitle className="text-lg text-slate-900">Invoice Audit Particulars</CardTitle>
-              <CardDescription>Enter tax numbers, reference orders, and invoice items.</CardDescription>
+              <CardDescription>Select a PO reference and enter the due date.</CardDescription>
             </CardHeader>
             <CardContent className="p-6">
               <form onSubmit={handleGenerateInvoice} className="space-y-6">
@@ -490,26 +518,21 @@ Thank you for doing business with VendorBridge.
                       required
                     />
                   </div>
-                  <div className="col-span-2 sm:col-span-1">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">PO Reference</label>
-                    <input
-                      type="text"
-                      value={poReference}
-                      onChange={(e) => setPoReference(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-medium"
-                      placeholder="PO-2026-000"
-                      required
-                    />
-                  </div>
-                  <div className="col-span-2 sm:col-span-1">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">Vendor Name</label>
+                  <div className="col-span-2 sm:col-span-2">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">Select Purchase Order</label>
                     <select
-                      value={selectedVendor}
-                      onChange={(e) => setSelectedVendor(e.target.value)}
+                      value={poReferenceId}
+                      onChange={(e) => {
+                        setPoReferenceId(e.target.value);
+                        const po = posList.find(p => p._id === e.target.value);
+                        if (po) {
+                          setSelectedVendorId(typeof po.vendorId === 'object' && po.vendorId ? (po.vendorId as any)._id : po.vendorId);
+                        }
+                      }}
                       className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-medium"
                     >
-                      {VENDORS.map((v) => (
-                        <option key={v} value={v}>{v}</option>
+                      {posList.map((po) => (
+                        <option key={po._id} value={po._id}>{po.poNumber} - {typeof po.vendorId === 'object' && po.vendorId ? (po.vendorId as any).name : 'Unknown'}</option>
                       ))}
                     </select>
                   </div>
@@ -527,64 +550,46 @@ Thank you for doing business with VendorBridge.
 
                 <div className="border-t border-slate-100 pt-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800">Invoiced Items</h3>
-                    <Button type="button" onClick={addFormItem} variant="outline" size="sm" className="h-8 border-slate-200 text-xs font-semibold text-slate-700">
-                      <Plus className="w-3.5 h-3.5 mr-1" /> Add Item
-                    </Button>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800">Items (Loaded from PO)</h3>
                   </div>
 
                   <div className="space-y-3">
-                    {formItems.map((item, idx) => (
-                      <div key={idx} className="flex gap-3 items-center bg-slate-50/60 p-3 rounded-lg border border-slate-100">
-                        <div className="flex-1 min-w-[200px]">
-                          <input
-                            type="text"
-                            placeholder="Item description (e.g. Ocean Shipping Fee)"
-                            value={item.name}
-                            onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                            required
-                          />
+                    {(() => {
+                      const po = posList.find(p => p._id === poReferenceId);
+                      if (!po) return <div className="text-sm text-slate-500">No Purchase Order selected or available.</div>;
+                      return po.items.map((item, idx) => (
+                        <div key={idx} className="flex gap-3 items-center bg-slate-50/60 p-3 rounded-lg border border-slate-100">
+                          <div className="flex-1 min-w-[200px]">
+                            <input
+                              type="text"
+                              value={item.productName}
+                              className="w-full bg-slate-100 border border-slate-200 rounded-md px-2.5 py-1.5 text-sm cursor-not-allowed"
+                              disabled
+                            />
+                          </div>
+                          <div className="w-20">
+                            <input
+                              type="number"
+                              value={item.quantity}
+                              className="w-full bg-slate-100 border border-slate-200 rounded-md px-2.5 py-1.5 text-sm text-center cursor-not-allowed"
+                              disabled
+                            />
+                          </div>
+                          <div className="w-32 relative">
+                            <span className="absolute left-2.5 top-2.5 text-xs text-slate-400 font-semibold">$</span>
+                            <input
+                              type="number"
+                              value={item.unitPrice}
+                              className="w-full bg-slate-100 border border-slate-200 rounded-md pl-6 pr-2 py-1.5 text-sm cursor-not-allowed"
+                              disabled
+                            />
+                          </div>
+                          <div className="w-24 text-right text-sm font-bold text-slate-900 pr-1">
+                            {formatCurrency(item.quantity * item.unitPrice)}
+                          </div>
                         </div>
-                        <div className="w-20">
-                          <input
-                            type="number"
-                            min="1"
-                            placeholder="Qty"
-                            value={item.qty}
-                            onChange={(e) => handleItemChange(idx, 'qty', e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-center"
-                            required
-                          />
-                        </div>
-                        <div className="w-32 relative">
-                          <span className="absolute left-2.5 top-2.5 text-xs text-slate-400 font-semibold">₹</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="Price"
-                            value={item.price || ''}
-                            onChange={(e) => handleItemChange(idx, 'price', e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-md pl-6 pr-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                            required
-                          />
-                        </div>
-                        <div className="w-24 text-right text-sm font-bold text-slate-900 pr-1">
-                          {formatCurrency(item.qty * item.price)}
-                        </div>
-                        <Button 
-                          type="button" 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 text-danger hover:bg-danger/10 hover:text-danger"
-                          onClick={() => removeFormItem(idx)}
-                          disabled={formItems.length === 1}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ))}
+                      ));
+                    })()}
                   </div>
                 </div>
 
@@ -592,7 +597,7 @@ Thank you for doing business with VendorBridge.
                   <Button type="button" variant="ghost" onClick={() => setActiveView('list')} className="border border-slate-200 text-slate-700">
                     Cancel
                   </Button>
-                  <Button type="submit" className="bg-primary text-white shadow-sm shadow-primary/20">
+                  <Button type="submit" className="bg-primary text-white shadow-sm shadow-primary/20" disabled={posList.length === 0}>
                     Generate Invoice
                   </Button>
                 </div>
@@ -607,28 +612,34 @@ Thank you for doing business with VendorBridge.
               <CardDescription>Automatic splitting of Central and State taxes.</CardDescription>
             </CardHeader>
             <CardContent className="p-5 space-y-4">
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between text-slate-500">
-                  <span>Subtotal</span>
-                  <span className="font-semibold text-slate-800">{formatCurrency(calculateGSTTotals(formItems).subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>CGST (9.0%)</span>
-                  <span className="font-semibold text-slate-800">{formatCurrency(calculateGSTTotals(formItems).cgst)}</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>SGST (9.0%)</span>
-                  <span className="font-semibold text-slate-800">{formatCurrency(calculateGSTTotals(formItems).sgst)}</span>
-                </div>
-                <div className="flex justify-between text-slate-600 font-medium border-t border-slate-100 pt-2">
-                  <span>Total Tax / GST</span>
-                  <span className="text-slate-800">{formatCurrency(calculateGSTTotals(formItems).totalTax)}</span>
-                </div>
-                <div className="border-t border-slate-150 pt-3 flex justify-between text-base font-bold text-slate-900">
-                  <span>Grand Total</span>
-                  <span className="text-primary text-lg">{formatCurrency(calculateGSTTotals(formItems).grandTotal)}</span>
-                </div>
-              </div>
+              {(() => {
+                const po = posList.find(p => p._id === poReferenceId);
+                const totals = calculateGSTTotals(po ? po.items : []);
+                return (
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between text-slate-500">
+                      <span>Subtotal</span>
+                      <span className="font-semibold text-slate-800">{formatCurrency(totals.subtotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>CGST (9.0%)</span>
+                      <span className="font-semibold text-slate-800">{formatCurrency(totals.cgst)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>SGST (9.0%)</span>
+                      <span className="font-semibold text-slate-800">{formatCurrency(totals.sgst)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600 font-medium border-t border-slate-100 pt-2">
+                      <span>Total Tax / GST</span>
+                      <span className="text-slate-800">{formatCurrency(totals.totalTax)}</span>
+                    </div>
+                    <div className="border-t border-slate-150 pt-3 flex justify-between text-base font-bold text-slate-900">
+                      <span>Grand Total</span>
+                      <span className="text-primary text-lg">{formatCurrency(totals.grandTotal)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="bg-slate-50 rounded-lg p-3 border border-slate-150 text-[10px] text-slate-500 leading-relaxed">
                 <strong>GSTIN Registration:</strong> GSTIN29AAACB1012C1Z4<br />
@@ -665,10 +676,10 @@ Thank you for doing business with VendorBridge.
                 </div>
                 <div className="sm:text-right">
                   <h2 className="text-xl font-bold tracking-tight text-slate-900">TAX INVOICE</h2>
-                  <div className="text-primary text-lg font-bold mt-1">{selectedInvoice.id}</div>
+                  <div className="text-primary text-lg font-bold mt-1">{selectedInvoice.invoiceNumber}</div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    PO Reference: <strong className="text-slate-700">{selectedInvoice.poId}</strong><br />
-                    Payment Due Date: <strong className="text-slate-700">{selectedInvoice.dueDate}</strong>
+                    PO Reference: <strong className="text-slate-700">{getPoNumber(selectedInvoice)}</strong><br />
+                    Payment Due Date: <strong className="text-slate-700">{selectedInvoice.dueDate || 'N/A'}</strong>
                   </p>
                 </div>
               </div>
@@ -679,9 +690,9 @@ Thank you for doing business with VendorBridge.
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1">
                     <Building className="w-3.5 h-3.5" /> Billed From (Vendor)
                   </h4>
-                  <div className="font-bold text-slate-900 text-sm">{selectedInvoice.vendor}</div>
+                  <div className="font-bold text-slate-900 text-sm">{getVendorName(selectedInvoice)}</div>
                   <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    Vendor Registration: VB-{selectedInvoice.vendor.replace(/\s+/g, '').substring(0, 5).toUpperCase()}<br />
+                    Vendor Registration: VB-{getVendorName(selectedInvoice).replace(/\s+/g, '').substring(0, 5).toUpperCase()}<br />
                     Registered Office: Area Road 15, Block B, New Delhi, India
                   </p>
                 </div>
@@ -711,13 +722,13 @@ Thank you for doing business with VendorBridge.
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {selectedInvoice.items.map((item, idx) => (
+                    {getInvoiceItems(selectedInvoice).map((item: any, idx: number) => (
                       <TableRow key={idx}>
-                        <TableCell className="pl-4 font-semibold text-slate-900 text-sm">{item.name}</TableCell>
-                        <TableCell className="text-right text-slate-600">{formatCurrency(item.price)}</TableCell>
-                        <TableCell className="text-center text-slate-900 font-medium">{item.qty}</TableCell>
+                        <TableCell className="pl-4 font-semibold text-slate-900 text-sm">{item.productName}</TableCell>
+                        <TableCell className="text-right text-slate-600">{formatCurrency(item.unitPrice)}</TableCell>
+                        <TableCell className="text-center text-slate-900 font-medium">{item.quantity}</TableCell>
                         <TableCell className="pr-4 text-right font-bold text-slate-950">
-                          {formatCurrency(item.qty * item.price)}
+                          {formatCurrency(item.quantity * item.unitPrice)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -734,23 +745,23 @@ Thank you for doing business with VendorBridge.
                 <div className="w-full sm:w-64 space-y-2 text-sm">
                   <div className="flex justify-between text-slate-500">
                     <span>Taxable Subtotal</span>
-                    <span className="font-semibold text-slate-900">{formatCurrency(calculateGSTTotals(selectedInvoice.items).subtotal)}</span>
+                    <span className="font-semibold text-slate-900">{formatCurrency(calculateGSTTotals(getInvoiceItems(selectedInvoice)).subtotal)}</span>
                   </div>
                   <div className="flex justify-between text-slate-500">
                     <span>CGST (9.0%)</span>
-                    <span className="font-semibold text-slate-900">{formatCurrency(calculateGSTTotals(selectedInvoice.items).cgst)}</span>
+                    <span className="font-semibold text-slate-900">{formatCurrency(calculateGSTTotals(getInvoiceItems(selectedInvoice)).cgst)}</span>
                   </div>
                   <div className="flex justify-between text-slate-500">
                     <span>SGST (9.0%)</span>
-                    <span className="font-semibold text-slate-900">{formatCurrency(calculateGSTTotals(selectedInvoice.items).sgst)}</span>
+                    <span className="font-semibold text-slate-900">{formatCurrency(calculateGSTTotals(getInvoiceItems(selectedInvoice)).sgst)}</span>
                   </div>
                   <div className="flex justify-between text-slate-600 font-medium border-t border-slate-100 pt-1.5">
                     <span>Total Tax GST</span>
-                    <span className="text-slate-900 font-semibold">{formatCurrency(calculateGSTTotals(selectedInvoice.items).totalTax)}</span>
+                    <span className="text-slate-900 font-semibold">{formatCurrency(calculateGSTTotals(getInvoiceItems(selectedInvoice)).totalTax)}</span>
                   </div>
                   <div className="border-t border-slate-150 pt-2 flex justify-between text-base font-bold text-slate-955">
                     <span>Grand Total</span>
-                    <span className="text-primary text-lg font-extrabold">{formatCurrency(calculateGSTTotals(selectedInvoice.items).grandTotal)}</span>
+                    <span className="text-primary text-lg font-extrabold">{formatCurrency(calculateGSTTotals(getInvoiceItems(selectedInvoice)).grandTotal)}</span>
                   </div>
                 </div>
               </div>
@@ -760,7 +771,7 @@ Thank you for doing business with VendorBridge.
             <div className="bg-slate-50/70 border-t border-slate-100 p-4 flex flex-wrap justify-between items-center gap-3">
               <div className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full bg-primary animate-ping"></div>
-                Invoice: {selectedInvoice.id}
+                Invoice: {selectedInvoice.invoiceNumber}
               </div>
               
               <div className="flex items-center gap-2">
@@ -820,7 +831,7 @@ Thank you for doing business with VendorBridge.
                 {selectedInvoice.status === 'overdue' && (
                   <div className="flex gap-2 p-3 bg-danger/10 border border-danger/20 rounded-lg text-xs text-danger font-medium leading-relaxed">
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>This invoice is overdue. Please click <strong>Send Email</strong> to dispatch a notification reminder to {selectedInvoice.vendor}.</span>
+                    <span>This invoice is overdue. Please click <strong>Send Email</strong> to dispatch a notification reminder to {getVendorName(selectedInvoice)}.</span>
                   </div>
                 )}
                 

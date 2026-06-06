@@ -41,7 +41,7 @@ const purchaseOrderSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["generated", "sent", "acknowledged", "fulfilled"],
+    enum: ["generated", "sent", "acknowledged", "fulfilled", "draft", "pending", "approved", "shipped", "delivered"],
     default: "generated"
   },
   pdfUrl: { 

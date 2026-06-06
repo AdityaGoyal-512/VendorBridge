@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,17 +10,58 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { Plus, Search, Filter, MoreHorizontal } from 'lucide-react';
-
-const vendors = [
-  { id: 'V-001', name: 'TechCorp Supplies', category: 'Electronics', contact: 'john@techcorp.com', status: 'active', spend: '$45,000' },
-  { id: 'V-002', name: 'Office Essentials', category: 'Stationery', contact: 'sales@officeessentials.com', status: 'active', spend: '$12,400' },
-  { id: 'V-003', name: 'Global Logistics', category: 'Shipping', contact: 'support@globallogistics.com', status: 'under_review', spend: '$8,900' },
-  { id: 'V-004', name: 'Delta Systems', category: 'Software', contact: 'billing@deltasys.com', status: 'active', spend: '$120,000' },
-  { id: 'V-005', name: 'Prime Manufacturing', category: 'Raw Materials', contact: 'info@primemanufacturing.com', status: 'inactive', spend: '$0' },
-];
+import { Plus, Search, Filter, MoreHorizontal, Loader2 } from 'lucide-react';
+import { api, Vendor, PurchaseOrder } from '@/lib/api';
 
 export default function Vendors() {
+  const [vendorsList, setVendorsList] = useState<Vendor[]>([]);
+  const [posList, setPosList] = useState<PurchaseOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [vends, pos] = await Promise.all([
+          api.getVendors(),
+          api.getPurchaseOrders()
+        ]);
+        setVendorsList(vends || []);
+        setPosList(pos || []);
+      } catch (err) {
+        console.error('Error loading vendors page data:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  const getVendorSpend = (vendorId: string) => {
+    const total = posList
+      .filter(po => {
+        const id = typeof po.vendorId === 'object' && po.vendorId ? (po.vendorId as any)._id : po.vendorId;
+        return id === vendorId && ['approved', 'shipped', 'delivered'].includes(po.status);
+      })
+      .reduce((sum, po) => sum + po.totalAmount, 0);
+
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(total);
+  };
+
+  const filteredVendors = vendorsList.filter(vendor => 
+    vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    vendor.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    vendor.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="animate-spin h-8 w-8 text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -41,6 +83,8 @@ export default function Vendors() {
               <input
                 type="text"
                 placeholder="Search vendors..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-background border border-input rounded-md pl-9 pr-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors"
               />
             </div>
@@ -64,31 +108,40 @@ export default function Vendors() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {vendors.map((vendor) => (
-                <TableRow key={vendor.id}>
-                  <TableCell className="font-medium text-muted-foreground">{vendor.id}</TableCell>
-                  <TableCell className="font-semibold text-foreground">{vendor.name}</TableCell>
-                  <TableCell>{vendor.category}</TableCell>
-                  <TableCell className="text-muted-foreground">{vendor.contact}</TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant={
-                        vendor.status === 'active' ? 'success' :
-                        vendor.status === 'under_review' ? 'warning' : 'secondary'
-                      }
-                      className="capitalize"
-                    >
-                      {vendor.status.replace('_', ' ')}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-medium">{vendor.spend}</TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
+              {filteredVendors.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                    No vendors found.
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                filteredVendors.map((vendor) => (
+                  <TableRow key={vendor._id}>
+                    <TableCell className="font-medium text-muted-foreground">
+                      VB-{vendor._id.slice(-5).toUpperCase()}
+                    </TableCell>
+                    <TableCell className="font-semibold text-foreground">{vendor.name}</TableCell>
+                    <TableCell>{vendor.category}</TableCell>
+                    <TableCell className="text-muted-foreground">{vendor.email}</TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant={
+                          vendor.status === 'active' ? 'success' : 'secondary'
+                        }
+                        className="capitalize"
+                      >
+                        {vendor.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-medium">{getVendorSpend(vendor._id)}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
