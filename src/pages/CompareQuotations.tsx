@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Trophy, Star, Clock, Truck, ShieldCheck, Download } from 'lucide-react';
+import { Trophy, Star, Clock, Truck, ShieldCheck, Download, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -11,13 +11,13 @@ export default function CompareQuotations() {
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
-  const rfqId = location.state?.rfqId;
+  const [selectedRfqId, setSelectedRfqId] = useState<string | null>(location.state?.rfqId || null);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['quotations', rfqId],
+    queryKey: ['quotations', selectedRfqId],
     queryFn: async () => {
-      if (!rfqId) return [];
-      const response = await fetch(`http://localhost:8080/api/v1/quotations/rfq/${rfqId}`, {
+      if (!selectedRfqId) return [];
+      const response = await fetch(`http://localhost:8080/api/v1/quotations/rfq/${selectedRfqId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
@@ -25,7 +25,18 @@ export default function CompareQuotations() {
       if (!response.ok) throw new Error('Failed to fetch quotations');
       const json = await response.json();
       return json.data;
-    }
+    },
+    enabled: !!selectedRfqId
+  });
+
+  const rfqsQuery = useQuery({
+    queryKey: ['rfqs_for_comparison'],
+    queryFn: async () => {
+      const response = await fetch('http://localhost:8080/api/v1/rfqs');
+      const json = await response.json();
+      return json.data;
+    },
+    enabled: !selectedRfqId
   });
 
   const updateStatusMutation = useMutation({
@@ -42,7 +53,7 @@ export default function CompareQuotations() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['quotations', rfqId] });
+      queryClient.invalidateQueries({ queryKey: ['quotations', selectedRfqId] });
       queryClient.invalidateQueries({ queryKey: ['quotations'] }); // Also invalidate main table
     }
   });
@@ -66,11 +77,50 @@ export default function CompareQuotations() {
     );
   }
 
-  if (!rfqId) {
+  if (!selectedRfqId) {
     return (
-      <div className="p-8 text-center space-y-4 animate-fade-in">
-        <p className="text-muted-foreground">Please select an RFQ from the RFQs page to compare bids.</p>
-        <Button onClick={() => navigate('/rfqs')}>Back to RFQs</Button>
+      <div className="space-y-6 animate-fade-in max-w-5xl mx-auto">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Compare Bids</h1>
+            <p className="text-muted-foreground">Select an active RFQ to review and compare its submitted quotations.</p>
+          </div>
+        </div>
+
+        {rfqsQuery.isLoading ? (
+          <div className="p-8 text-center text-muted-foreground">Loading available RFQs...</div>
+        ) : rfqsQuery.isError ? (
+          <div className="p-8 text-center text-danger">Failed to load RFQs.</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {(rfqsQuery.data || []).map((rfq: any) => (
+              <Card 
+                key={rfq._id} 
+                className="cursor-pointer hover:border-primary transition-all duration-200 hover:shadow-md" 
+                onClick={() => setSelectedRfqId(rfq._id)}
+              >
+                <CardHeader>
+                  <CardTitle className="text-lg line-clamp-1">{rfq.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 mb-4">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Product</span>
+                      <span className="font-medium">{rfq.productName}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Quantity</span>
+                      <span className="font-medium">{rfq.quantity} Units</span>
+                    </div>
+                  </div>
+                  <Button variant="outline" className="w-full bg-primary/5 text-primary hover:bg-primary hover:text-white">
+                    Select to Compare
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -82,8 +132,13 @@ export default function CompareQuotations() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Compare Quotations</h1>
-          <p className="text-muted-foreground">RFQ: Server Upgrade Components</p>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center">
+            <Button variant="ghost" size="icon" className="mr-2 -ml-2" onClick={() => setSelectedRfqId(null)}>
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            Compare Quotations
+          </h1>
+          <p className="text-muted-foreground">Viewing bids for selected RFQ.</p>
         </div>
         <Button variant="outline">
           <Download className="w-4 h-4 mr-2" />
@@ -92,7 +147,9 @@ export default function CompareQuotations() {
       </div>
 
       {quotes.length === 0 ? (
-        <div className="p-8 text-center text-muted-foreground border rounded-lg border-dashed">No quotations submitted for this RFQ yet.</div>
+        <div className="p-8 text-center text-muted-foreground border rounded-lg border-dashed bg-slate-50">
+          No quotations have been submitted for this RFQ yet.
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {quotes.map((quote: any, index: number) => {
