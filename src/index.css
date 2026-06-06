@@ -95,3 +95,46 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground));
 }
+
+/* Print Styles for PDF Export */
+@media print {
+  /* Hide sidebar, header, and buttons */
+  aside,
+  header,
+  button,
+  .no-print,
+  nav,
+  .border-t.border-slate-100.p-4 {
+    display: none !important;
+  }
+
+  /* Reset main content margins and paddings */
+  .ml-64 {
+    margin-left: 0 !important;
+  }
+
+  main {
+    padding: 0 !important;
+    background: transparent !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Optimize the print view container */
+  #printable-po-voucher {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .shadow-sm,
+  .border {
+    box-shadow: none !important;
+  }
+}
+
