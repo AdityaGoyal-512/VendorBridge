@@ -11,20 +11,58 @@ import {
 } from '@/components/ui/table';
 import { Search, Filter, MoreHorizontal, FileCheck, CheckCircle, XCircle } from 'lucide-react';
 
-const quotes = [
-  { id: 'QT-2026-104', rfqId: 'RFQ-2026-089', vendor: 'TechCorp Supplies', amount: '$12,500.00', date: '2026-06-08', status: 'pending' },
-  { id: 'QT-2026-105', rfqId: 'RFQ-2026-089', vendor: 'Office Essentials', amount: '$11,800.00', date: '2026-06-09', status: 'accepted' },
-  { id: 'QT-2026-106', rfqId: 'RFQ-2026-089', vendor: 'Delta Systems', amount: '$14,200.00', date: '2026-06-09', status: 'rejected' },
-  { id: 'QT-2026-107', rfqId: 'RFQ-2026-092', vendor: 'Prime Manufacturing', amount: '$8,400.00', date: '2026-06-11', status: 'pending' },
-];
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 
 export default function Quotations() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['quotations'],
+    queryFn: async () => {
+      const response = await fetch('http://localhost:8080/api/v1/quotations');
+      if (!response.ok) throw new Error('Failed to fetch quotations');
+      const json = await response.json();
+      return json.data;
+    }
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string, status: string }) => {
+      const response = await fetch(`http://localhost:8080/api/v1/quotations/${id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (!response.ok) throw new Error('Failed to update status');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['quotations'] });
+    }
+  });
+
+  const handleUpdateStatus = (id: string, status: string) => {
+    updateStatusMutation.mutate({ id, status });
+  };
+
+  const quotes = data || [];
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Quotations</h1>
           <p className="text-muted-foreground">Review and compare vendor bids.</p>
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={() => navigate('/quotations/compare')}>
+            Compare Bids
+          </Button>
+          <Button onClick={() => navigate('/quotations/submit')} className="bg-primary text-white">
+            Submit Quotation
+          </Button>
         </div>
       </div>
 
@@ -46,60 +84,83 @@ export default function Quotations() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Quote ID</TableHead>
-                <TableHead>RFQ Reference</TableHead>
-                <TableHead>Vendor</TableHead>
-                <TableHead>Date Submitted</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {quotes.map((quote) => (
-                <TableRow key={quote.id}>
-                  <TableCell className="font-medium text-foreground flex items-center">
-                    <FileCheck className="w-4 h-4 mr-2 text-muted-foreground" />
-                    {quote.id}
-                  </TableCell>
-                  <TableCell className="text-primary hover:underline cursor-pointer">{quote.rfqId}</TableCell>
-                  <TableCell>{quote.vendor}</TableCell>
-                  <TableCell>{quote.date}</TableCell>
-                  <TableCell className="text-right font-medium">{quote.amount}</TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant={
-                        quote.status === 'accepted' ? 'success' :
-                        quote.status === 'rejected' ? 'danger' : 'warning'
-                      }
-                      className="capitalize"
-                    >
-                      {quote.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {quote.status === 'pending' ? (
-                      <div className="flex items-center justify-end gap-2">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-success hover:text-success hover:bg-success/10">
-                          <CheckCircle className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-danger hover:text-danger hover:bg-danger/10">
-                          <XCircle className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </TableCell>
+          {isLoading ? (
+            <div className="p-8 text-center text-muted-foreground">Loading quotations...</div>
+          ) : isError ? (
+            <div className="p-8 text-center text-danger">Failed to load quotations. Is the backend running?</div>
+          ) : quotes.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">No quotations found.</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Quote ID</TableHead>
+                  <TableHead>RFQ Reference</TableHead>
+                  <TableHead>Vendor</TableHead>
+                  <TableHead>Date Submitted</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {quotes.map((quote: any) => (
+                  <TableRow key={quote._id}>
+                    <TableCell className="font-medium text-foreground flex items-center">
+                      <FileCheck className="w-4 h-4 mr-2 text-muted-foreground" />
+                      QT-{quote._id.substring(quote._id.length - 6).toUpperCase()}
+                    </TableCell>
+                    <TableCell className="text-primary hover:underline cursor-pointer">{quote.rfqId?.title || 'Unknown RFQ'}</TableCell>
+                    <TableCell>{quote.vendorId?.name || 'Unknown Vendor'}</TableCell>
+                    <TableCell>{new Date(quote.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-right font-medium">
+                      ${quote.totalPrice?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant={
+                          quote.status === 'accepted' ? 'success' :
+                          quote.status === 'rejected' ? 'danger' : 
+                          quote.status === 'under_review' ? 'default' : 'warning'
+                        }
+                        className="capitalize"
+                      >
+                        {quote.status.replace('_', ' ')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {quote.status === 'submitted' || quote.status === 'under_review' ? (
+                        <div className="flex items-center justify-end gap-2">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-success hover:text-success hover:bg-success/10"
+                            onClick={() => handleUpdateStatus(quote._id, 'accepted')}
+                            disabled={updateStatusMutation.isPending}
+                          >
+                            <CheckCircle className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-danger hover:text-danger hover:bg-danger/10"
+                            onClick={() => handleUpdateStatus(quote._id, 'rejected')}
+                            disabled={updateStatusMutation.isPending}
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

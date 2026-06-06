@@ -55,6 +55,22 @@ export const getQuotationsForRFQ = async (req, res) => {
   }
 };
 
+// @desc    Get all quotations (for general dashboard)
+// @route   GET /api/v1/quotations
+// @access  Private
+export const getAllQuotations = async (req, res) => {
+  try {
+    const quotations = await Quotation.find()
+      .populate('vendorId', 'name')
+      .populate('rfqId', 'title')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({ success: true, data: quotations });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // @desc    Update quotation status
 // @route   PUT /api/v1/quotations/:id/status
 // @access  Private (Manager)

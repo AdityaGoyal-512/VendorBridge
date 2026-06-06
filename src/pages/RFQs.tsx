@@ -27,6 +27,11 @@ export default function RFQs() {
   const [rfqs, setRfqs] = useState<any[]>([]);
   const [search, setSearch] = useState("");
 
+  const userStr = localStorage.getItem("user");
+  const user = userStr ? JSON.parse(userStr) : null;
+  const isVendor = user?.role === 'vendor';
+  const isManager = user?.role === 'admin' || user?.role === 'procurement_officer' || user?.role === 'manager';
+
   useEffect(() => {
     fetchRFQs();
   }, []);
@@ -70,12 +75,14 @@ export default function RFQs() {
           </p>
         </div>
 
-        <Button
-          onClick={() => navigate("/rfqs/create")}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Create RFQ
-        </Button>
+        {!isVendor && (
+          <Button
+            onClick={() => navigate("/rfqs/create")}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Create RFQ
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -148,13 +155,25 @@ export default function RFQs() {
                     ).toLocaleDateString()}
                   </TableCell>
 
-                  <TableCell>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
+                  <TableCell className="text-right">
+                    {isVendor ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-primary hover:bg-primary/10"
+                        onClick={() => navigate(`/quotations/submit`, { state: { rfq } })}
+                      >
+                        Submit Quote
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigate(`/quotations/compare`, { state: { rfqId: rfq._id } })}
+                      >
+                        Compare Bids
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

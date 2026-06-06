@@ -4,48 +4,66 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Trophy, Star, Clock, Truck, ShieldCheck, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 export default function CompareQuotations() {
-  // Dummy Data mimicking backend sort logic (lowest price first)
-  const quotes = [
-    { 
-      id: 'QT-2026-104', 
-      vendor: 'TechCorp Supplies', 
-      rating: 4.8,
-      unitPrice: 25.00,
-      totalPrice: 12500.00,
-      deliveryTime: 10,
-      status: 'under_review',
-      bestPrice: true 
-    },
-    { 
-      id: 'QT-2026-105', 
-      vendor: 'Office Essentials', 
-      rating: 4.2,
-      unitPrice: 28.50,
-      totalPrice: 14250.00,
-      deliveryTime: 5,
-      status: 'under_review',
-      bestPrice: false 
-    },
-    { 
-      id: 'QT-2026-107', 
-      vendor: 'Prime Manufacturing', 
-      rating: 4.9,
-      unitPrice: 26.00,
-      totalPrice: 13000.00,
-      deliveryTime: 14,
-      status: 'under_review',
-      bestPrice: false 
+  const queryClient = useQueryClient();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const rfqId = location.state?.rfqId;
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['quotations', rfqId],
+    queryFn: async () => {
+      if (!rfqId) return [];
+      const response = await fetch(`http://localhost:8080/api/v1/quotations/rfq/${rfqId}`);
+      if (!response.ok) throw new Error('Failed to fetch quotations');
+      const json = await response.json();
+      return json.data;
     }
-  ];
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string, status: string }) => {
+      const response = await fetch(`http://localhost:8080/api/v1/quotations/${id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (!response.ok) throw new Error('Failed to update status');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['quotations', rfqId] });
+      queryClient.invalidateQueries({ queryKey: ['quotations'] }); // Also invalidate main table
+    }
+  });
+
+  const handleUpdateStatus = (id: string, status: string) => {
+    updateStatusMutation.mutate({ id, status });
+  };
+
+  const quotes = data || [];
+
+  if (!rfqId) {
+    return (
+      <div className="p-8 text-center space-y-4 animate-fade-in">
+        <p className="text-muted-foreground">Please select an RFQ from the RFQs page to compare bids.</p>
+        <Button onClick={() => navigate('/rfqs')}>Back to RFQs</Button>
+      </div>
+    );
+  }
+
+  if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading comparison...</div>;
+  if (isError) return <div className="p-8 text-center text-danger">Failed to load comparison data.</div>;
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Compare Quotations</h1>
-          <p className="text-muted-foreground">RFQ-2026-090: Server Upgrade Components</p>
+          <p className="text-muted-foreground">RFQ: Server Upgrade Components</p>
         </div>
         <Button variant="outline">
           <Download className="w-4 h-4 mr-2" />
@@ -53,74 +71,94 @@ export default function CompareQuotations() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {quotes.map((quote, index) => (
-          <Card 
-            key={quote.id} 
-            className={cn(
-              "relative transition-all duration-200 hover:shadow-md",
-              quote.bestPrice ? "border-success ring-1 ring-success/20 bg-success/5" : "border-border"
-            )}
-          >
-            {quote.bestPrice && (
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-success text-white px-3 py-1 rounded-full text-xs font-bold flex items-center shadow-sm">
-                <Trophy className="w-3 h-3 mr-1" />
-                LOWEST BID
-              </div>
-            )}
-            <CardHeader className="pb-4 border-b bg-white rounded-t-xl">
-              <CardTitle className="text-lg flex justify-between items-start">
-                <span className="font-bold">{quote.vendor}</span>
-                <Badge variant={quote.bestPrice ? 'success' : 'secondary'} className="font-mono">
-                  {quote.id}
-                </Badge>
-              </CardTitle>
-              <div className="flex items-center text-sm text-muted-foreground mt-2">
-                <Star className="w-4 h-4 text-warning fill-warning mr-1" />
-                <span className="font-medium text-foreground">{quote.rating}</span>
-                <span className="mx-2">•</span>
-                <ShieldCheck className="w-4 h-4 text-success mr-1" />
-                Verified Vendor
-              </div>
-            </CardHeader>
-            <CardContent className="pt-6 space-y-6">
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground mb-1">Total Value</p>
-                <p className={cn("text-3xl font-bold tracking-tight", quote.bestPrice ? "text-success" : "text-foreground")}>
-                  ${quote.totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">${quote.unitPrice.toFixed(2)} per unit</p>
-              </div>
-
-              <div className="bg-white rounded-lg border p-4 space-y-3">
-                <div className="flex justify-between items-center text-sm">
-                  <div className="flex items-center text-muted-foreground">
-                    <Truck className="w-4 h-4 mr-2" />
-                    Delivery
+      {quotes.length === 0 ? (
+        <div className="p-8 text-center text-muted-foreground border rounded-lg border-dashed">No quotations submitted for this RFQ yet.</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {quotes.map((quote: any, index: number) => {
+            const isLowest = index === 0; // Backend sorts by lowest price first
+            return (
+              <Card 
+                key={quote._id} 
+                className={cn(
+                  "relative transition-all duration-200 hover:shadow-md",
+                  isLowest ? "border-success ring-1 ring-success/20 bg-success/5" : "border-border",
+                  quote.status === 'accepted' ? "border-success bg-success/5 opacity-50" : "",
+                  quote.status === 'rejected' ? "border-danger bg-danger/5 opacity-50" : ""
+                )}
+              >
+                {isLowest && quote.status !== 'rejected' && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-success text-white px-3 py-1 rounded-full text-xs font-bold flex items-center shadow-sm">
+                    <Trophy className="w-3 h-3 mr-1" />
+                    LOWEST BID
                   </div>
-                  <span className="font-semibold">{quote.deliveryTime} Days</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <div className="flex items-center text-muted-foreground">
-                    <Clock className="w-4 h-4 mr-2" />
-                    Status
+                )}
+                <CardHeader className="pb-4 border-b bg-white rounded-t-xl">
+                  <CardTitle className="text-lg flex justify-between items-start">
+                    <span className="font-bold">{quote.vendorId?.name || 'Unknown Vendor'}</span>
+                    <Badge variant={isLowest ? 'success' : 'secondary'} className="font-mono">
+                      QT-{quote._id.substring(quote._id.length - 6).toUpperCase()}
+                    </Badge>
+                  </CardTitle>
+                  <div className="flex items-center text-sm text-muted-foreground mt-2">
+                    <Star className="w-4 h-4 text-warning fill-warning mr-1" />
+                    <span className="font-medium text-foreground">{quote.vendorId?.rating || '4.5'}</span>
+                    <span className="mx-2">•</span>
+                    <ShieldCheck className="w-4 h-4 text-success mr-1" />
+                    Verified Vendor
                   </div>
-                  <span className="capitalize font-medium text-warning">{quote.status.replace('_', ' ')}</span>
-                </div>
-              </div>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-6">
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground mb-1">Total Value</p>
+                    <p className={cn("text-3xl font-bold tracking-tight", isLowest ? "text-success" : "text-foreground")}>
+                      ${quote.totalPrice?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">${quote.unitPrice?.toFixed(2)} per unit ({quote.quantity} qty)</p>
+                  </div>
 
-              <div className="pt-2">
-                <Button className={cn("w-full", quote.bestPrice ? "bg-success hover:bg-success/90" : "bg-primary")}>
-                  Approve Quotation
-                </Button>
-                <Button variant="ghost" className="w-full mt-2 text-danger hover:text-danger hover:bg-danger/10">
-                  Reject
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                  <div className="bg-white rounded-lg border p-4 space-y-3">
+                    <div className="flex justify-between items-center text-sm">
+                      <div className="flex items-center text-muted-foreground">
+                        <Truck className="w-4 h-4 mr-2" />
+                        Delivery
+                      </div>
+                      <span className="font-semibold">{quote.deliveryTime} Days</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <div className="flex items-center text-muted-foreground">
+                        <Clock className="w-4 h-4 mr-2" />
+                        Status
+                      </div>
+                      <span className={cn("capitalize font-medium", quote.status === 'accepted' ? 'text-success' : quote.status === 'rejected' ? 'text-danger' : 'text-warning')}>
+                        {quote.status.replace('_', ' ')}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <Button 
+                      className={cn("w-full", isLowest ? "bg-success hover:bg-success/90" : "bg-primary")}
+                      onClick={() => handleUpdateStatus(quote._id, 'accepted')}
+                      disabled={updateStatusMutation.isPending || quote.status === 'accepted' || quote.status === 'rejected'}
+                    >
+                      {quote.status === 'accepted' ? 'Approved' : 'Approve Quotation'}
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      className="w-full mt-2 text-danger hover:text-danger hover:bg-danger/10"
+                      onClick={() => handleUpdateStatus(quote._id, 'rejected')}
+                      disabled={updateStatusMutation.isPending || quote.status === 'accepted' || quote.status === 'rejected'}
+                    >
+                      {quote.status === 'rejected' ? 'Rejected' : 'Reject'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

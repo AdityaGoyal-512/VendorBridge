@@ -1,32 +1,69 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FileText, Send, Calculator, AlertCircle, ArrowRight } from 'lucide-react';
 
 export default function SubmitQuotation() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const rfq = location.state?.rfq;
+
   const [unitPrice, setUnitPrice] = useState<number>(0);
-  const [quantity, setQuantity] = useState<number>(500);
+  const [quantity, setQuantity] = useState<number>(rfq?.quantity || 1);
   const [deliveryTime, setDeliveryTime] = useState<number>(0);
   const [notes, setNotes] = useState('');
-  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+
   const totalPrice = unitPrice * quantity;
 
-  // Mock RFQ Data (Normally fetched via React Query)
-  const activeRFQ = {
-    id: 'RFQ-2026-090',
-    title: 'Server Upgrade Components',
-    productName: 'Enterprise SSD 2TB',
-    description: 'High-performance NVMe SSDs required for Q3 server infrastructure upgrades.',
-    quantity: 500,
-    deadline: '2026-06-10'
-  };
+  if (!rfq) {
+    return (
+      <div className="p-8 text-center space-y-4">
+        <p className="text-muted-foreground">Please select an RFQ to submit a quotation.</p>
+        <Button onClick={() => navigate('/rfqs')}>Back to RFQs</Button>
+      </div>
+    );
+  }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const userStr = localStorage.getItem("user");
+  const user = userStr ? JSON.parse(userStr) : null;
+  // If vendor doesn't have an ID in auth, use a mock for the demo
+  const vendorId = user?.vendorId || user?._id || '6661a0e10000000000000001'; 
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate API Call
-    console.log('Submitting:', { unitPrice, quantity, totalPrice, deliveryTime, notes });
-    alert('Quotation submitted successfully to procurement!');
+    setIsSubmitting(true);
+    
+    try {
+      const response = await fetch('http://localhost:8080/api/v1/quotations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rfqId: rfq._id,
+          vendorId: vendorId,
+          unitPrice,
+          quantity,
+          deliveryTime,
+          notes
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess(true);
+        alert('Quotation submitted successfully to the backend!');
+      } else {
+        alert('Error: ' + data.message);
+      }
+    } catch (err) {
+      alert('Failed to connect to the server. Is it running?');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -50,27 +87,27 @@ export default function SubmitQuotation() {
           <CardContent className="space-y-4 text-sm">
             <div>
               <p className="text-muted-foreground mb-1">Reference ID</p>
-              <p className="font-semibold">{activeRFQ.id}</p>
+              <p className="font-semibold">{rfq._id}</p>
             </div>
             <div>
               <p className="text-muted-foreground mb-1">Title</p>
-              <p className="font-medium">{activeRFQ.title}</p>
+              <p className="font-medium">{rfq.title}</p>
             </div>
             <div>
               <p className="text-muted-foreground mb-1">Product</p>
-              <p className="font-medium">{activeRFQ.productName}</p>
+              <p className="font-medium">{rfq.productName}</p>
             </div>
             <div>
               <p className="text-muted-foreground mb-1">Requested Quantity</p>
-              <p className="font-bold text-lg">{activeRFQ.quantity} Units</p>
+              <p className="font-bold text-lg">{rfq.quantity} Units</p>
             </div>
             <div>
               <p className="text-muted-foreground mb-1">Submission Deadline</p>
-              <Badge variant="warning">{activeRFQ.deadline}</Badge>
+              <Badge variant="warning">{new Date(rfq.deadline).toLocaleDateString()}</Badge>
             </div>
             <div className="pt-2 border-t mt-4">
               <p className="text-muted-foreground mb-1">Description</p>
-              <p className="text-slate-600 leading-relaxed">{activeRFQ.description}</p>
+              <p className="text-slate-600 leading-relaxed">{rfq.description || 'No description provided.'}</p>
             </div>
           </CardContent>
         </Card>
@@ -151,9 +188,9 @@ export default function SubmitQuotation() {
 
               <div className="flex justify-end gap-3 pt-4 border-t">
                 <Button type="button" variant="outline">Cancel</Button>
-                <Button type="submit" className="bg-primary text-white">
+                <Button type="submit" disabled={isSubmitting || success} className="bg-primary text-white">
                   <Send className="w-4 h-4 mr-2" />
-                  Submit Quotation
+                  {isSubmitting ? 'Submitting...' : success ? 'Submitted!' : 'Submit Quotation'}
                 </Button>
               </div>
             </form>
