@@ -21,7 +21,11 @@ export default function Quotations() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['quotations'],
     queryFn: async () => {
-      const response = await fetch('http://localhost:8080/api/v1/quotations');
+      const response = await fetch('http://localhost:8080/api/v1/quotations', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        }
+      });
       if (!response.ok) throw new Error('Failed to fetch quotations');
       const json = await response.json();
       return json.data;
@@ -32,7 +36,10 @@ export default function Quotations() {
     mutationFn: async ({ id, status }: { id: string, status: string }) => {
       const response = await fetch(`http://localhost:8080/api/v1/quotations/${id}/status`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        },
         body: JSON.stringify({ status })
       });
       if (!response.ok) throw new Error('Failed to update status');
@@ -49,6 +56,11 @@ export default function Quotations() {
 
   const quotes = data || [];
 
+  const userStr = localStorage.getItem("user");
+  const user = userStr ? JSON.parse(userStr) : null;
+  const isVendor = user?.role === 'vendor';
+  const isManager = user?.role === 'admin' || user?.role === 'procurement_officer' || user?.role === 'manager';
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -57,12 +69,16 @@ export default function Quotations() {
           <p className="text-muted-foreground">Review and compare vendor bids.</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => navigate('/quotations/compare')}>
-            Compare Bids
-          </Button>
-          <Button onClick={() => navigate('/quotations/submit')} className="bg-primary text-white">
-            Submit Quotation
-          </Button>
+          {isManager && (
+            <Button variant="outline" onClick={() => navigate('/quotations/compare')}>
+              Compare Bids
+            </Button>
+          )}
+          {isVendor && (
+            <Button onClick={() => navigate('/quotations/submit')} className="bg-primary text-white">
+              Submit Quotation
+            </Button>
+          )}
         </div>
       </div>
 
@@ -129,7 +145,7 @@ export default function Quotations() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {quote.status === 'submitted' || quote.status === 'under_review' ? (
+                      {(quote.status === 'submitted' || quote.status === 'under_review') && isManager ? (
                         <div className="flex items-center justify-end gap-2">
                           <Button 
                             variant="ghost" 

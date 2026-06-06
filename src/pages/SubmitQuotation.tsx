@@ -30,8 +30,17 @@ export default function SubmitQuotation() {
 
   const userStr = localStorage.getItem("user");
   const user = userStr ? JSON.parse(userStr) : null;
-  // If vendor doesn't have an ID in auth, use a mock for the demo
+  const isVendor = user?.role === 'vendor';
   const vendorId = user?.vendorId || user?._id || '6661a0e10000000000000001'; 
+
+  if (user && !isVendor) {
+    return (
+      <div className="p-8 text-center space-y-4">
+        <p className="text-rose-600 font-semibold">Access Denied: Only vendors can submit quotations.</p>
+        <Button onClick={() => navigate('/rfqs')}>Back to RFQs</Button>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +49,10 @@ export default function SubmitQuotation() {
     try {
       const response = await fetch('http://localhost:8080/api/v1/quotations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        },
         body: JSON.stringify({
           rfqId: rfq._id,
           vendorId: vendorId,

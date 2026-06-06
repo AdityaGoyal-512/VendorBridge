@@ -17,7 +17,11 @@ export default function CompareQuotations() {
     queryKey: ['quotations', rfqId],
     queryFn: async () => {
       if (!rfqId) return [];
-      const response = await fetch(`http://localhost:8080/api/v1/quotations/rfq/${rfqId}`);
+      const response = await fetch(`http://localhost:8080/api/v1/quotations/rfq/${rfqId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        }
+      });
       if (!response.ok) throw new Error('Failed to fetch quotations');
       const json = await response.json();
       return json.data;
@@ -28,7 +32,10 @@ export default function CompareQuotations() {
     mutationFn: async ({ id, status }: { id: string, status: string }) => {
       const response = await fetch(`http://localhost:8080/api/v1/quotations/${id}/status`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        },
         body: JSON.stringify({ status })
       });
       if (!response.ok) throw new Error('Failed to update status');
@@ -45,6 +52,19 @@ export default function CompareQuotations() {
   };
 
   const quotes = data || [];
+
+  const userStr = localStorage.getItem("user");
+  const user = userStr ? JSON.parse(userStr) : null;
+  const isManager = user?.role === 'admin' || user?.role === 'procurement_officer' || user?.role === 'manager';
+
+  if (user && !isManager) {
+    return (
+      <div className="p-8 text-center space-y-4 animate-fade-in">
+        <p className="text-rose-600 font-semibold">Access Denied: Only procurement officers can compare bids.</p>
+        <Button onClick={() => navigate('/rfqs')}>Back to RFQs</Button>
+      </div>
+    );
+  }
 
   if (!rfqId) {
     return (
