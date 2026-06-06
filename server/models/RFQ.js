@@ -24,11 +24,22 @@ const rfqSchema = new mongoose.Schema({
   attachmentUrl: { 
     type: String 
   },
+  estimatedBudget:{
+  type:Number
+  },
+  category:{
+  type:String
+ },
   status: {
     type: String,
     enum: ["draft", "published", "closed"],
     default: "draft",
     index: true
+  },
+  priority:{
+  type:String,
+  enum:["low","medium","high"],
+  default:"medium"
   },
   assignedVendors: [{ 
     type: mongoose.Schema.Types.ObjectId, 

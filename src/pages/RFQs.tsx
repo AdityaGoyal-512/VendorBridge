@@ -1,93 +1,158 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from '@/components/ui/table';
-import { Plus, Search, Filter, MoreHorizontal, FileText } from 'lucide-react';
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-const rfqs = [
-  { id: 'RFQ-2026-089', title: 'Q3 Office Equipment', department: 'Operations', deadline: '2026-06-15', status: 'open', bids: 3 },
-  { id: 'RFQ-2026-090', title: 'Server Upgrade Components', department: 'IT', deadline: '2026-06-10', status: 'closed', bids: 5 },
-  { id: 'RFQ-2026-091', title: 'Marketing Materials', department: 'Marketing', deadline: '2026-06-20', status: 'draft', bids: 0 },
-  { id: 'RFQ-2026-092', title: 'Facility Maintenance Services', department: 'Facilities', deadline: '2026-06-12', status: 'open', bids: 1 },
-];
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+import {
+  Plus,
+  Search,
+  FileText,
+  MoreHorizontal,
+} from "lucide-react";
 
 export default function RFQs() {
+  const navigate = useNavigate();
+
+  const [rfqs, setRfqs] = useState<any[]>([]);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    fetchRFQs();
+  }, []);
+
+  const fetchRFQs = async () => {
+    try {
+      const response = await fetch(
+        "http://localhost:8080/api/v1/rfqs"
+      );
+
+      const data = await response.json();
+
+      if (Array.isArray(data)) {
+        setRfqs(data);
+      } else if (data.data) {
+        setRfqs(data.data);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const filteredRFQs = useMemo(() => {
+    return rfqs.filter(
+      (rfq) =>
+        rfq.title?.toLowerCase().includes(search.toLowerCase()) ||
+        rfq.productName?.toLowerCase().includes(search.toLowerCase())
+    );
+  }, [rfqs, search]);
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Requests for Quotation</h1>
-          <p className="text-muted-foreground">Manage your RFQs and invite vendors to bid.</p>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Requests for Quotation
+          </h1>
+
+          <p className="text-muted-foreground">
+            Manage RFQs and procurement requests.
+          </p>
         </div>
-        <Button>
+
+        <Button
+          onClick={() => navigate("/rfqs/create")}
+        >
           <Plus className="mr-2 h-4 w-4" />
           Create RFQ
         </Button>
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between border-b p-4">
-          <div className="flex items-center gap-2 flex-1">
-            <div className="relative w-80">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search RFQs..."
-                className="w-full bg-background border border-input rounded-md pl-9 pr-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors"
-              />
-            </div>
-            <Button variant="outline" size="sm" className="h-9">
-              <Filter className="mr-2 h-4 w-4" />
-              Filter
-            </Button>
+        <CardHeader className="border-b p-4">
+          <div className="relative w-80">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+
+            <input
+              type="text"
+              placeholder="Search RFQs..."
+              value={search}
+              onChange={(e) =>
+                setSearch(e.target.value)
+              }
+              className="w-full border rounded-md py-2 pl-10 pr-4"
+            />
           </div>
         </CardHeader>
+
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>RFQ ID</TableHead>
                 <TableHead>Title</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Deadline</TableHead>
-                <TableHead>Bids Received</TableHead>
+                <TableHead>Product</TableHead>
+                <TableHead>Quantity</TableHead>
+                <TableHead>Budget</TableHead>
+                <TableHead>Priority</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
+                <TableHead>Deadline</TableHead>
+                <TableHead />
               </TableRow>
             </TableHeader>
+
             <TableBody>
-              {rfqs.map((rfq) => (
-                <TableRow key={rfq.id}>
-                  <TableCell className="font-medium text-primary flex items-center">
-                    <FileText className="w-4 h-4 mr-2 text-muted-foreground" />
-                    {rfq.id}
+              {filteredRFQs.map((rfq) => (
+                <TableRow key={rfq._id}>
+                  <TableCell className="font-medium flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    {rfq.title}
                   </TableCell>
-                  <TableCell className="font-semibold text-foreground">{rfq.title}</TableCell>
-                  <TableCell>{rfq.department}</TableCell>
-                  <TableCell>{rfq.deadline}</TableCell>
+
                   <TableCell>
-                    <span className="font-medium">{rfq.bids}</span>
+                    {rfq.productName}
                   </TableCell>
+
                   <TableCell>
-                    <Badge 
-                      variant={
-                        rfq.status === 'open' ? 'success' :
-                        rfq.status === 'closed' ? 'secondary' : 'outline'
-                      }
-                      className="capitalize"
-                    >
+                    {rfq.quantity}
+                  </TableCell>
+
+                  <TableCell>
+                    ₹{rfq.estimatedBudget}
+                  </TableCell>
+
+                  <TableCell>
+                    <Badge variant="outline">
+                      {rfq.priority}
+                    </Badge>
+                  </TableCell>
+
+                  <TableCell>
+                    <Badge>
                       {rfq.status}
                     </Badge>
                   </TableCell>
+
                   <TableCell>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    {new Date(
+                      rfq.deadline
+                    ).toLocaleDateString()}
+                  </TableCell>
+
+                  <TableCell>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                    >
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </TableCell>

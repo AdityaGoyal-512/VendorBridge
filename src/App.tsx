@@ -14,6 +14,9 @@ import PurchaseOrders from './pages/PurchaseOrders';
 import Invoices from './pages/Invoices';
 import Reports from './pages/Reports';
 import ActivityLogs from './pages/ActivityLogs';
+import CreateRFQ from "./pages/CreateRFQ";
+import CreateVendor from "./pages/CreateVendor";
+
 
 function App() {
   return (
@@ -30,6 +33,8 @@ function App() {
           <Route path="invoices" element={<Invoices />} />
           <Route path="reports" element={<Reports />} />
           <Route path="activity-logs" element={<ActivityLogs />} />
+          <Route path="rfqs/create" element={<CreateRFQ />} />
+          <Route path="vendors/create" element={<CreateVendor />} />
         </Route>
       </Routes>
     </BrowserRouter>
