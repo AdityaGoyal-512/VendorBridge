@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,305 +19,236 @@ import {
   Plus, 
   TrendingUp, 
   TrendingDown, 
+  ArrowUpRight, 
   Clock, 
   Receipt, 
   ArrowRight,
   Sparkles,
+  Calendar,
   CheckCircle,
   PlusCircle,
-  AlertCircle,
-  Shield,
-  Activity,
-  Server,
-  FileCheck,
-  Send,
-  UserPlus
+  AlertCircle
 } from 'lucide-react';
+import { api, Vendor, RFQ, Invoice, ActivityLog } from '@/lib/api';
 
 export default function Dashboard() {
   const navigate = useNavigate();
 
-  // ─── Load Logged-in User Profile ───
-  const userStr = localStorage.getItem("user");
-  const user = userStr ? JSON.parse(userStr) : null;
-  const role = user?.role || "procurement_officer"; 
-  const userName = user?.name || "John Doe";
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [rfqs, setRfqs] = useState<RFQ[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [activities, setActivities] = useState<ActivityLog[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Role Display Config
-  const ROLE_LABELS: Record<string, string> = {
-    admin: "System Administrator",
-    manager: "Procurement Manager",
-    procurement_officer: "Procurement Officer",
-    vendor: "Vendor / Supplier"
-  };
-  const roleLabel = ROLE_LABELS[role] || "User";
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [vList, rList, iList, aList] = await Promise.all([
+          api.getVendors(),
+          api.getRFQs(),
+          api.getInvoices(),
+          api.getActivityLogs()
+        ]);
+        setVendors(vList || []);
+        setRfqs(rList || []);
+        setInvoices(iList || []);
+        setActivities(aList || []);
+      } catch (err) {
+        console.error('Error loading dashboard data:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
 
-  // Mock Data
-  const recentRFQs = [
-    { id: 'RFQ-2026-089', title: 'Q3 Office Equipment', department: 'Operations', deadline: '2026-06-15', bids: 3, status: 'open' },
-    { id: 'RFQ-2026-092', title: 'Facility Maintenance Services', department: 'Facilities', deadline: '2026-06-12', bids: 1, status: 'open' },
-    { id: 'RFQ-2026-090', title: 'Server Upgrade Components', department: 'IT', deadline: '2026-06-10', bids: 5, status: 'closed' },
-  ];
+  const activeVendors = vendors.filter(v => v.status === 'active').length;
+  const reviewVendors = vendors.filter(v => v.status !== 'active').length;
 
-  const recentInvoices = [
-    { id: 'INV-2026-894', poId: 'PO-2026-002', vendor: 'Office Essentials', amount: '$1,200.00', dueDate: '2026-06-01', status: 'overdue' },
-    { id: 'INV-2026-893', poId: 'PO-2026-003', vendor: 'Global Logistics', amount: '$8,950.00', dueDate: '2026-06-15', status: 'pending' },
-    { id: 'INV-2026-892', poId: 'PO-2026-004', vendor: 'Delta Systems', amount: '$12,400.00', dueDate: '2026-07-02', status: 'paid' },
-  ];
+  const activeRfqsCount = rfqs.filter(r => r.status === 'published').length;
+  
+  const totalPaidSpend = invoices
+    .filter(inv => inv.status === 'paid')
+    .reduce((sum, inv) => sum + inv.totalAmount, 0);
 
-  const recentActivity = [
-    { id: 1, user: 'Jane Smith', action: 'Approved Purchase Order', target: 'PO-2026-004', time: '10 minutes ago', type: 'success' },
-    { id: 2, user: 'John Doe', action: 'Created new RFQ', target: 'RFQ-2026-092', time: '1 hour ago', type: 'create' },
-    { id: 3, user: 'System', action: 'Auto-flagged Invoice', target: 'INV-2026-894', time: '2 hours ago', type: 'alert' },
-    { id: 4, user: 'Alice Johnson', action: 'Added new Vendor', target: 'Prime Manufacturing', time: 'Yesterday', type: 'create' },
-  ];
+  const pendingPosCount = invoices.filter(inv => inv.status === 'pending').length;
+
+  const recentRFQs = rfqs.slice(0, 5).map(rfq => ({
+    id: rfq._id.slice(-8).toUpperCase(),
+    title: rfq.title,
+    department: rfq.productName || 'Procurement',
+    bids: rfq.assignedVendors ? rfq.assignedVendors.length : 0,
+    status: rfq.status === 'published' ? 'open' : rfq.status,
+    deadline: rfq.deadline ? new Date(rfq.deadline).toLocaleDateString() : 'N/A'
+  }));
+
+  const recentInvoices = invoices.slice(0, 5).map(inv => {
+    const vendorName = typeof inv.vendorId === 'object' && inv.vendorId ? (inv.vendorId as any).name : 'Unknown';
+    return {
+      id: inv.invoiceNumber,
+      poId: typeof inv.poId === 'object' && inv.poId ? (inv.poId as any).poNumber : 'PO-UNKNOWN',
+      vendor: vendorName,
+      amount: `$${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      dueDate: inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'N/A',
+      status: inv.status
+    };
+  });
+
+  const recentActivity = activities.slice(0, 5).map((act, index) => {
+    const userName = typeof act.userId === 'object' && act.userId ? (act.userId as any).name : 'System';
+    const timeStr = act.createdAt ? new Date(act.createdAt).toLocaleDateString() + ' ' + new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now';
+    let type: 'success' | 'create' | 'alert' = 'create';
+    if (act.module === 'po' || act.module === 'approval') type = 'success';
+    if (act.module === 'invoice' && act.action.includes('flag')) type = 'alert';
+    return {
+      id: act._id || index,
+      user: userName,
+      action: act.action,
+      target: act.targetId ? act.targetId.slice(-8).toUpperCase() : '',
+      time: timeStr,
+      type
+    };
+  });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* ─── Role-Tailored Header ─── */}
+      {/* Welcome & Action Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white p-6 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden">
         <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-primary/5 rounded-full blur-xl pointer-events-none"></div>
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-            Welcome back, {userName} <Sparkles className="w-5 h-5 text-amber-500 animate-pulse" />
+            Welcome back, John <Sparkles className="w-5 h-5 text-amber-500 animate-pulse" />
           </h1>
-          <p className="text-muted-foreground mt-1">
-            Logged in as <span className="font-semibold text-primary">{roleLabel}</span>. Here is your dashboard summary.
-          </p>
+          <p className="text-muted-foreground mt-1">Here is a summary of your procurement activity for today.</p>
         </div>
-        
-        {/* Quick Actions per Role */}
         <div className="flex flex-wrap items-center gap-3">
-          {role === 'admin' && (
-            <>
-              <Button onClick={() => navigate('/users')} size="sm" className="h-10 bg-primary hover:bg-primary/95 text-white">
-                <UserPlus className="mr-2 h-4 w-4" />
-                Add User
-              </Button>
-              <Button onClick={() => navigate('/activity-logs')} variant="outline" size="sm" className="h-10 border-slate-200 text-slate-700">
-                <Activity className="mr-2 h-4 w-4" />
-                Audit Trail
-              </Button>
-            </>
-          )}
-          {role === 'manager' && (
-            <>
-              <Button onClick={() => navigate('/approvals')} size="sm" className="h-10 bg-primary hover:bg-primary/95 text-white">
-                <CheckSquare className="mr-2 h-4 w-4" />
-                Approvals Queue
-              </Button>
-              <Button onClick={() => navigate('/reports')} variant="outline" size="sm" className="h-10 border-slate-200 text-slate-700">
-                <DollarSign className="mr-2 h-4 w-4" />
-                Spend Analytics
-              </Button>
-            </>
-          )}
-          {role === 'procurement_officer' && (
-            <>
-              <Button onClick={() => navigate('/rfqs')} size="sm" className="h-10 bg-primary hover:bg-primary/95 text-white">
-                <Plus className="mr-2 h-4 w-4" />
-                Create RFQ
-              </Button>
-              <Button onClick={() => navigate('/vendors')} variant="outline" size="sm" className="h-10 border-slate-200 text-slate-700">
-                <Users className="mr-2 h-4 w-4" />
-                Add Vendor
-              </Button>
-            </>
-          )}
-          {role === 'vendor' && (
-            <>
-              <Button onClick={() => navigate('/quotations/submit')} size="sm" className="h-10 bg-primary hover:bg-primary/95 text-white">
-                <Send className="mr-2 h-4 w-4" />
-                Submit Bid
-              </Button>
-              <Button onClick={() => navigate('/invoices')} variant="outline" size="sm" className="h-10 border-slate-200 text-slate-700">
-                <Receipt className="mr-2 h-4 w-4" />
-                My Invoices
-              </Button>
-            </>
-          )}
+          <Button onClick={() => navigate('/rfqs')} size="sm" className="h-10 bg-primary hover:bg-primary/95 text-white transition-all shadow-sm shadow-primary/20">
+            <Plus className="mr-2 h-4 w-4" />
+            Create RFQ
+          </Button>
+          <Button onClick={() => navigate('/vendors')} variant="outline" size="sm" className="h-10 border-slate-200 text-slate-700 hover:bg-slate-50 transition-all">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Vendor
+          </Button>
         </div>
       </div>
 
-      {/* ─── Role-Tailored KPI Cards Grid ─── */}
+      {/* KPI Cards Grid */}
       <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Card 1 */}
-        {role === 'admin' ? (
-          <Card className="hover:shadow-md border-slate-100 cursor-pointer" onClick={() => navigate('/users')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">System Users</span>
-              <div className="p-2 rounded-lg bg-indigo-50 text-primary"><Users className="h-5 w-5" /></div>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="text-3xl font-bold">48</div>
-              <p className="text-xs text-muted-foreground mt-2">40 Active | 8 Deactivated</p>
-            </CardContent>
-          </Card>
-        ) : role === 'vendor' ? (
-          <Card className="hover:shadow-md border-slate-100">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Active Bids</span>
-              <div className="p-2 rounded-lg bg-indigo-50 text-primary"><Send className="h-5 w-5" /></div>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="text-3xl font-bold">5</div>
-              <p className="text-xs text-muted-foreground mt-2">Across 3 open RFQs</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="hover:shadow-md border-slate-100 cursor-pointer" onClick={() => navigate('/vendors')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Vendors</span>
-              <div className="p-2 rounded-lg bg-indigo-50 text-primary"><Users className="h-5 w-5" /></div>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold">142</span>
-                <span className="text-xs font-semibold text-success flex items-center bg-success/10 px-1.5 py-0.5 rounded">
-                  <TrendingUp className="h-3 w-3 mr-0.5" /> +8%
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">128 Active onboarding profiles</p>
-            </CardContent>
-          </Card>
-        )}
+        {/* Total Vendors */}
+        <Card className="hover:shadow-md hover:-translate-y-1 transition-all duration-300 border-slate-100 cursor-pointer group" onClick={() => navigate('/vendors')}>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 group-hover:text-primary transition-colors">Total Vendors</span>
+            <div className="p-2 rounded-lg bg-indigo-50 text-primary group-hover:bg-primary group-hover:text-white transition-colors duration-300">
+              <Users className="h-5 w-5" />
+            </div>
+          </CardHeader>
+          <CardContent className="pt-2">
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold tracking-tight text-slate-900">{vendors.length}</span>
+              <span className="text-xs font-semibold text-success flex items-center bg-success/10 px-1.5 py-0.5 rounded">
+                <TrendingUp className="h-3 w-3 mr-0.5" />
+                Live
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-success"></span>
+              {activeVendors} active
+              <span className="text-slate-300">|</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-warning"></span>
+              {reviewVendors} review
+            </p>
+          </CardContent>
+        </Card>
 
-        {/* Card 2 */}
-        {role === 'admin' ? (
-          <Card className="hover:shadow-md border-slate-100">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">System Health</span>
-              <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600"><Server className="h-5 w-5" /></div>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="text-3xl font-bold text-success">99.9%</div>
-              <p className="text-xs text-muted-foreground mt-2">All services online</p>
-            </CardContent>
-          </Card>
-        ) : role === 'vendor' ? (
-          <Card className="hover:shadow-md border-slate-100 cursor-pointer" onClick={() => navigate('/rfqs')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Invitations to Bid</span>
-              <div className="p-2 rounded-lg bg-blue-50 text-blue-600"><FileText className="h-5 w-5" /></div>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="text-3xl font-bold">4</div>
-              <p className="text-xs text-danger font-medium mt-2">Closing this week</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="hover:shadow-md border-slate-100 cursor-pointer" onClick={() => navigate('/rfqs')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Active RFQs</span>
-              <div className="p-2 rounded-lg bg-blue-50 text-blue-600"><FileText className="h-5 w-5" /></div>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold">12</span>
-                <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">32 Bids</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2 text-danger">4 closing this week</p>
-            </CardContent>
-          </Card>
-        )}
+        {/* Active RFQs */}
+        <Card className="hover:shadow-md hover:-translate-y-1 transition-all duration-300 border-slate-100 cursor-pointer group" onClick={() => navigate('/rfqs')}>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 group-hover:text-primary transition-colors">Active RFQs</span>
+            <div className="p-2 rounded-lg bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300">
+              <FileText className="h-5 w-5" />
+            </div>
+          </CardHeader>
+          <CardContent className="pt-2">
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold tracking-tight text-slate-900">{activeRfqsCount}</span>
+              <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                {rfqs.reduce((sum, r) => sum + (r.assignedVendors ? r.assignedVendors.length : 0), 0)} bids
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+              <Clock className="h-3 w-3 text-slate-400" />
+              <span>Database Sync</span>
+            </p>
+          </CardContent>
+        </Card>
 
-        {/* Card 3 */}
-        {role === 'admin' ? (
-          <Card className="hover:shadow-md border-slate-100 cursor-pointer" onClick={() => navigate('/activity-logs')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Recent Events</span>
-              <div className="p-2 rounded-lg bg-amber-50 text-amber-600"><Activity className="h-5 w-5" /></div>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="text-3xl font-bold">850</div>
-              <p className="text-xs text-muted-foreground mt-2">Logged in the last 24h</p>
-            </CardContent>
-          </Card>
-        ) : role === 'vendor' ? (
-          <Card className="hover:shadow-md border-slate-100 cursor-pointer" onClick={() => navigate('/invoices')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Paid Invoices</span>
-              <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600"><Receipt className="h-5 w-5" /></div>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="text-3xl font-bold text-success">$18,400</div>
-              <p className="text-xs text-muted-foreground mt-2">3 Invoices cleared this month</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="hover:shadow-md border-slate-100 cursor-pointer" onClick={() => navigate('/approvals')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Pending Approvals</span>
-              <div className="p-2 rounded-lg bg-amber-50 text-amber-600"><CheckSquare className="h-5 w-5" /></div>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold">8</span>
-                <span className="text-xs font-semibold text-warning bg-warning/10 px-1.5 py-0.5 rounded">Urgent</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">3 POs | 5 Quotations</p>
-            </CardContent>
-          </Card>
-        )}
+        {/* Pending Approvals */}
+        <Card className="hover:shadow-md hover:-translate-y-1 transition-all duration-300 border-slate-100 cursor-pointer group" onClick={() => navigate('/invoices')}>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 group-hover:text-primary transition-colors">Pending Invoices</span>
+            <div className="p-2 rounded-lg bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors duration-300">
+              <CheckSquare className="h-5 w-5" />
+            </div>
+          </CardHeader>
+          <CardContent className="pt-2">
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold tracking-tight text-slate-900">{pendingPosCount}</span>
+              <span className="text-xs font-semibold text-warning bg-warning/10 px-1.5 py-0.5 rounded">
+                Review
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+              Requires attention
+            </p>
+          </CardContent>
+        </Card>
 
-        {/* Card 4 */}
-        {role === 'admin' ? (
-          <Card className="hover:shadow-md border-slate-100">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Database Status</span>
-              <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600"><Shield className="h-5 w-5" /></div>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="text-3xl font-bold">Active</div>
-              <p className="text-xs text-muted-foreground mt-2">Fallback Local DB connected</p>
-            </CardContent>
-          </Card>
-        ) : role === 'vendor' ? (
-          <Card className="hover:shadow-md border-slate-100 cursor-pointer" onClick={() => navigate('/invoices')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Pending Payments</span>
-              <div className="p-2 rounded-lg bg-amber-50 text-amber-600"><DollarSign className="h-5 w-5" /></div>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="text-3xl font-bold text-warning">$8,950</div>
-              <p className="text-xs text-muted-foreground mt-2">1 Invoice awaiting approval</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="hover:shadow-md border-slate-100 cursor-pointer" onClick={() => navigate('/reports')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Monthly Spend</span>
-              <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600"><DollarSign className="h-5 w-5" /></div>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold">$45,200</span>
-                <span className="text-xs font-semibold text-success flex items-center bg-success/10 px-1.5 py-0.5 rounded">
-                  <TrendingDown className="h-3 w-3 mr-0.5" /> -2.4%
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">78% of monthly budget utilized</p>
-            </CardContent>
-          </Card>
-        )}
+        {/* Monthly Spend */}
+        <Card className="hover:shadow-md hover:-translate-y-1 transition-all duration-300 border-slate-100 cursor-pointer group" onClick={() => navigate('/reports')}>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 group-hover:text-primary transition-colors">Total Paid Spend</span>
+            <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors duration-300">
+              <DollarSign className="h-5 w-5" />
+            </div>
+          </CardHeader>
+          <CardContent className="pt-2">
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold tracking-tight text-slate-900">
+                {"$" + totalPaidSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              <span className="text-xs font-semibold text-success flex items-center bg-success/10 px-1.5 py-0.5 rounded">
+                Live
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+              From settled invoices
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* ─── Tables and Activity Logs ─── */}
+      {/* Main Sections Layout */}
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
-        {/* Left Side Lists (Col Span 2) */}
+        {/* Recent RFQs & Recent Invoices (Col Span 2) */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Card A: RFQs */}
+          {/* Recent RFQs Card */}
           <Card className="border-slate-100 shadow-sm overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 py-4 px-6 bg-slate-50/50">
               <div>
-                <CardTitle className="text-lg font-semibold text-slate-900">
-                  {role === 'vendor' ? "Opportunities to Bid" : "Recent RFQs"}
-                </CardTitle>
-                <CardDescription className="text-xs text-muted-foreground">
-                  {role === 'vendor' ? "Request for Quotations open for bidding" : "Latest requests for quotations"}
-                </CardDescription>
+                <CardTitle className="text-lg font-semibold text-slate-900">Recent RFQs</CardTitle>
+                <CardDescription className="text-xs text-muted-foreground">Latest requests for quotations</CardDescription>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => navigate('/rfqs')} className="text-primary hover:text-primary/90 text-xs font-semibold flex items-center gap-1">
+              <Button variant="ghost" size="sm" onClick={() => navigate('/rfqs')} className="text-primary hover:text-primary/90 hover:bg-indigo-50/50 text-xs font-semibold flex items-center gap-1">
                 View All <ArrowRight className="w-3.5 h-3.5" />
               </Button>
             </CardHeader>
@@ -361,18 +293,14 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Card B: Invoices */}
+          {/* Recent Invoices Card */}
           <Card className="border-slate-100 shadow-sm overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 py-4 px-6 bg-slate-50/50">
               <div>
-                <CardTitle className="text-lg font-semibold text-slate-900">
-                  {role === 'vendor' ? "My Invoices" : "Recent Invoices"}
-                </CardTitle>
-                <CardDescription className="text-xs text-muted-foreground">
-                  {role === 'vendor' ? "Track submission and clearing of payments" : "Track pending and paid payments"}
-                </CardDescription>
+                <CardTitle className="text-lg font-semibold text-slate-900">Recent Invoices</CardTitle>
+                <CardDescription className="text-xs text-muted-foreground">Track pending and paid payments</CardDescription>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => navigate('/invoices')} className="text-primary hover:text-primary/90 text-xs font-semibold flex items-center gap-1">
+              <Button variant="ghost" size="sm" onClick={() => navigate('/invoices')} className="text-primary hover:text-primary/90 hover:bg-indigo-50/50 text-xs font-semibold flex items-center gap-1">
                 View All <ArrowRight className="w-3.5 h-3.5" />
               </Button>
             </CardHeader>
@@ -418,18 +346,14 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Right Side Timeline */}
+        {/* Recent Activity Timeline (Col Span 1) */}
         <Card className="border-slate-100 shadow-sm flex flex-col h-full overflow-hidden">
           <CardHeader className="border-b border-slate-100 py-4 px-6 bg-slate-50/50 flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-lg font-semibold text-slate-900">
-                {role === 'admin' ? "Audit Logs" : "Recent Activity"}
-              </CardTitle>
-              <CardDescription className="text-xs text-muted-foreground">
-                {role === 'admin' ? "System security audit trace" : "Real-time updates of system events"}
-              </CardDescription>
+              <CardTitle className="text-lg font-semibold text-slate-900">Recent Activity</CardTitle>
+              <CardDescription className="text-xs text-muted-foreground">Real-time audit log of system events</CardDescription>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/activity-logs')} className="text-slate-500 hover:text-slate-900 p-1 rounded">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/activity-logs')} className="text-slate-500 hover:text-slate-900 p-1 rounded hover:bg-slate-100">
               <ArrowRight className="w-4 h-4" />
             </Button>
           </CardHeader>
@@ -447,7 +371,7 @@ export default function Dashboard() {
                           <span className={`h-8 w-8 rounded-full flex items-center justify-center ring-8 ring-white transition-all
                             ${log.type === 'success' ? 'bg-success/15 text-success' : ''}
                             ${log.type === 'create' ? 'bg-primary/15 text-primary' : ''}
-                            ${log.type === 'alert' ? 'bg-danger/15 text-danger' : ''}
+                            ${log.type === 'alert' ? 'bg-danger/15 text-danger animate-pulse' : ''}
                           `}>
                             {log.type === 'success' && <CheckCircle className="w-4 h-4" />}
                             {log.type === 'create' && <PlusCircle className="w-4 h-4" />}

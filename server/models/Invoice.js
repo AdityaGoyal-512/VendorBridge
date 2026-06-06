@@ -32,7 +32,7 @@ const invoiceSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["generated", "sent", "paid"],
+    enum: ["generated", "sent", "paid", "pending", "overdue", "processing"],
     default: "generated"
   },
   pdfUrl: { 

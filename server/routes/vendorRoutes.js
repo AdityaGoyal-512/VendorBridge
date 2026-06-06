@@ -1,5 +1,6 @@
 import express from "express";
-
+import { authenticate } from "../middleware/auth.js";
+import { validate, vendorValidation } from "../middleware/validate.js";
 import {
   createVendor,
   getVendors,
@@ -9,12 +10,11 @@ import {
 
 const router = express.Router();
 
-router.post("/", createVendor);
+router.use(authenticate);
 
+router.post("/", vendorValidation, validate, createVendor);
 router.get("/", getVendors);
-
-router.put("/:id", updateVendor);
-
+router.put("/:id", vendorValidation, validate, updateVendor);
 router.delete("/:id", deleteVendor);
 
 export default router;

@@ -1,5 +1,6 @@
 import express from "express";
-
+import { authenticate } from "../middleware/auth.js";
+import { validate, rfqValidation } from "../middleware/validate.js";
 import {
   createRFQ,
   getRFQs,
@@ -13,13 +14,15 @@ import {
 
 const router = express.Router();
 
-router.post("/", createRFQ);
+router.use(authenticate);
+
+router.post("/", rfqValidation, validate, createRFQ);
 
 router.get("/", getRFQs);
 
 router.get("/:id", getRFQById);
 
-router.put("/:id", updateRFQ);
+router.put("/:id", rfqValidation, validate, updateRFQ);
 
 router.delete("/:id", deleteRFQ);
 
