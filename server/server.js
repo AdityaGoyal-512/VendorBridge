@@ -6,6 +6,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { User, Vendor, RFQ } from './models/index.js'; // Import models
 import apiRoutes from './routes/apiRoutes.js';
+import authRoutes from './routes/authRoutes.js';
+import quotationRoutes from './routes/quotationRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,6 +31,8 @@ app.get('/api/v1/health', (req, res) => {
   res.json({ status: 'active', message: 'VendorBridge API is running!' });
 });
 
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/quotations', quotationRoutes);
 app.use('/api/v1', apiRoutes);
 
 // Fallback all other requests to index.html for SPA routing
