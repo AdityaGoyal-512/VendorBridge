@@ -2,25 +2,29 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 
 import Dashboard from './pages/Dashboard';
-
 import Vendors from './pages/Vendors';
-
 import RFQs from './pages/RFQs';
-
 import Quotations from './pages/Quotations';
 import SubmitQuotation from './pages/SubmitQuotation';
 import CompareQuotations from './pages/CompareQuotations';
 import Approvals from './pages/Approvals';
-
 import PurchaseOrders from './pages/PurchaseOrders';
 import Invoices from './pages/Invoices';
 import Reports from './pages/Reports';
 import ActivityLogs from './pages/ActivityLogs';
+import UserManagement from './pages/UserManagement';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Auth routes — no layout shell */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+
+        {/* App routes — with sidebar + header */}
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
@@ -34,6 +38,7 @@ function App() {
           <Route path="invoices" element={<Invoices />} />
           <Route path="reports" element={<Reports />} />
           <Route path="activity-logs" element={<ActivityLogs />} />
+          <Route path="users" element={<UserManagement />} />
         </Route>
       </Routes>
     </BrowserRouter>

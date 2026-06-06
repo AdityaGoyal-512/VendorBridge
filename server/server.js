@@ -13,8 +13,12 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/vendorbrid
 // Middleware
 app.use(cors());
 app.use(express.json());
+import cookieParser from 'cookie-parser';
+app.use(cookieParser());
 
 import quotationRoutes from './routes/quotationRoutes.js';
+import authRoutes from './routes/authRoutes.js';
+import userRoutes from './routes/userRoutes.js';
 
 // Basic Route
 app.get('/api/v1/health', (req, res) => {
@@ -33,15 +37,31 @@ app.get('/api/v1/vendors', async (req, res) => {
 
 // API Routes
 app.use('/api/v1/quotations', quotationRoutes);
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/users', userRoutes);
 
 // Connect to MongoDB and start server
-mongoose.connect(MONGO_URI)
-  .then(() => {
-    console.log(`✅ Connected to MongoDB`);
-    app.listen(PORT, () => {
-      console.log(`🚀 Server is running on http://localhost:${PORT}`);
-    });
-  })
-  .catch((error) => {
-    console.error('❌ MongoDB connection error:', error);
+const startServer = async () => {
+  try {
+    console.log(`Connecting to MongoDB at: ${MONGO_URI.substring(0, 30)}...`);
+    await mongoose.connect(MONGO_URI);
+    console.log(`✅ Connected to MongoDB (Remote/Atlas)`);
+  } catch (error) {
+    console.error('❌ Remote MongoDB connection error:', error.message);
+    const localUri = 'mongodb://127.0.0.1:27017/vendorbridge';
+    try {
+      console.log(`Attempting fallback to local MongoDB at: ${localUri}`);
+      await mongoose.connect(localUri);
+      console.log(`✅ Connected to local MongoDB`);
+    } catch (localError) {
+      console.error('❌ Local MongoDB fallback failed:', localError.message);
+      console.warn('⚠️ Server starting without active database connection.');
+    }
+  }
+
+  app.listen(PORT, () => {
+    console.log(`🚀 Server is running on http://localhost:${PORT}`);
   });
+};
+
+startServer();
