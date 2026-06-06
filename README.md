@@ -1,104 +1,90 @@
-# VendorBridge - Procurement ERP
+# VendorBridge - Enterprise Procurement ERP
 
-VendorBridge is a modern, enterprise-grade Procurement ERP (Enterprise Resource Planning) system built with React, Vite, and TailwindCSS. It features a clean, minimal SaaS design inspired by modern enterprise software.
+VendorBridge is a comprehensive, full-stack Enterprise Resource Planning (ERP) system designed to streamline corporate procurement. It features a complete end-to-end workflow connecting Internal Procurement Managers with External Vendors, utilizing strict Role-Based Access Control (RBAC).
 
-## Tech Stack
+## 🌟 Key Features
 
-- **Framework**: React 19 + Vite
-- **Language**: TypeScript
-- **Styling**: TailwindCSS
-- **UI Components**: shadcn/ui (Radix UI + Tailwind)
-- **Routing**: React Router v7
-- **Data Fetching**: React Query v5
-- **Icons**: Lucide React
+- **Role-Based Access Control (RBAC)**: Secure routing and UI elements tailored specifically for `Admin`, `Procurement Officer`, `Manager`, and `Vendor`.
+- **RFQ Management**: Create and publish Requests for Quotation to an open market of registered vendors.
+- **Dynamic Bidding & Quotations**: Vendors can submit detailed quotes against open RFQs.
+- **Bid Comparisons**: Procurement officers can view automated, side-by-side bid comparisons highlighting the lowest/best bids.
+- **Approval Queues**: A centralized dashboard for managers to approve or reject vendor quotes.
+- **Invoicing & POs**: Automated GST tax splitting, purchase order tracking, and invoice dispatching.
 
----
+## 🛠️ Tech Stack
 
-## 🚀 Getting Started (For Developers)
+**Frontend**
+- React 19 + Vite + TypeScript
+- TailwindCSS & Shadcn UI (Radix)
+- React Router v7 & React Query v5
 
-In the Node.js ecosystem, we don't use a `requirements.txt` file (which is standard for Python). Instead, all dependencies and their required versions are defined in `package.json`. 
-
-### Prerequisites
-- **Node.js**: Version 20.x or higher (An `.nvmrc` file is included)
-- **Package Manager**: `npm` v10+
-
-### Standard Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/AdityaGoyal-512/VendorBridge.git
-   cd VendorBridge
-   ```
-
-2. Use the correct Node version (if using nvm):
-   ```bash
-   nvm use
-   ```
-
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
-5. Open your browser and navigate to `http://localhost:5173`.
+**Backend**
+- Node.js & Express.js
+- MongoDB & Mongoose
+- JSON Web Token (JWT) Authentication
+- Zod Data Validation
 
 ---
 
-## ⚠️ Important Note for Windows WSL Users
+## 🚀 Getting Started (Local Development)
 
-If you are developing inside Windows Subsystem for Linux (WSL), **do not use the Node.js installation from your Windows host**. Running Windows `npm` inside a WSL directory will fail during post-install scripts (due to UNC path constraints).
+The application consists of two separate servers that need to be run concurrently: the Vite frontend and the Node backend.
 
-**WSL Setup Fix:**
-1. Install Node Version Manager (NVM) natively inside your WSL Ubuntu terminal:
-   ```bash
-   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-   ```
-2. Restart your terminal and install Node native to Linux:
-   ```bash
-   nvm install 20
-   nvm use 20
-   ```
-3. Remove any broken installations and reinstall:
-   ```bash
-   rm -rf node_modules package-lock.json
-   npm install
-   npm run dev
-   ```
+### 1. Prerequisites
+- Node.js (v20+)
+- MongoDB (A local instance on `mongodb://127.0.0.1:27017` or an Atlas URI)
+
+### 2. Backend Setup
+```bash
+cd server
+npm install
+```
+Create a `.env` file in the `server` directory with:
+```env
+PORT=8080
+MONGO_URI=mongodb://127.0.0.1:27017/vendorbridge
+JWT_SECRET=your_super_secret_key
+JWT_EXPIRES_IN=24h
+```
+Start the backend:
+```bash
+npm run dev
+# Server will start on http://localhost:8080
+```
+
+### 3. Frontend Setup
+Open a new terminal window:
+```bash
+cd VendorBridge # (Project Root)
+npm install
+```
+Start the Vite development server:
+```bash
+npm run dev
+# Frontend will start on http://localhost:5173
+```
+
+### 4. Default Test Accounts
+If you use the backend `/api/v1/seed` endpoint or register manually, you can test different roles:
+- **Manager**: `admin@vendorbridge.com` (Has access to Approvals and Comparisons)
+- **Vendor**: `supplier@logistics.com` (Has access to Submit Quotes, restricted from internal tools)
 
 ---
 
 ## 📁 Project Structure
 
-```
+```text
 VendorBridge/
-├── public/               # Static assets (favicons, etc.)
-├── src/
-│   ├── components/
-│   │   ├── layout/       # Global layout components (Sidebar, Header)
-│   │   └── ui/           # Reusable generic components (Buttons, Cards, Tables)
-│   ├── lib/              # Utility functions (Tailwind mergers, etc.)
-│   ├── pages/            # Main application screens (Dashboard, RFQs, etc.)
-│   ├── App.tsx           # Router configuration and layout wrapping
-│   ├── index.css         # Global CSS variables and Tailwind directives
-│   └── main.tsx          # Application entry point
-├── package.json          # Dependency list ("requirements.txt" equivalent)
-├── tailwind.config.js    # Design system tokens and colors
-├── tsconfig.json         # TypeScript configuration
-└── vite.config.ts        # Vite bundler configuration
+├── server/                 # Express Backend
+│   ├── controllers/        # Business logic (auth, quotations, rfqs)
+│   ├── middleware/         # JWT Auth and RBAC guards
+│   ├── models/             # Mongoose schemas
+│   ├── routes/             # Express API routes
+│   └── server.js           # Entry point
+├── src/                    # React Frontend
+│   ├── components/layout/  # Dynamic Sidebar (Role-filtered)
+│   ├── pages/              # Application screens
+│   ├── lib/api.ts          # Axios/Fetch API client wrappers
+│   └── App.tsx             # Routing configuration
+└── tailwind.config.js      # Global design tokens
 ```
-
-## 🎨 Design System
-
-The application strictly follows a predefined design system:
-- **Primary**: `#4F46E5` (Indigo)
-- **Success**: `#10B981` (Emerald)
-- **Warning**: `#F59E0B` (Amber)
-- **Danger**: `#EF4444` (Red)
-- **Typography**: `Inter` (Google Fonts)
-
-All new components should utilize the `cn()` utility from `@/lib/utils` and Tailwind classes to maintain aesthetic consistency.
