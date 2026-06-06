@@ -16,7 +16,7 @@ import Reports from './pages/Reports';
 import ActivityLogs from './pages/ActivityLogs';
 
 import CreateRFQ from './pages/CreateRFQ';
-//import CreateVendor from './pages/CreateVendor';
+import CreateVendor from './pages/CreateVendor';
 
 import UserManagement from './pages/UserManagement';
 import LoginPage from './pages/LoginPage';

@@ -43,6 +43,9 @@ app.get(/.*/, (req, res) => {
 //app.use('/api/v1/vendors', vendorRoutes);
 //app.use('/api/v1/rfqs', rfqRoutes);
 
+import { errorHandler } from './utils/errorHandler.js';
+app.use(errorHandler);
+
 // Connect to MongoDB and start server
 const connectWithFallback = async () => {
   try {
