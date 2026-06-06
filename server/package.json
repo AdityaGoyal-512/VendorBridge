@@ -1,0 +1,14 @@
+{
+  "name": "vendorbridge-server",
+  "version": "1.0.0",
+  "description": "Backend API for VendorBridge",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "mongoose": "^8.4.0",
+    "dotenv": "^16.4.5"
+  }
+}
