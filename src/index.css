@@ -124,7 +124,8 @@
   }
 
   /* Optimize the print view container */
-  #printable-po-voucher {
+  #printable-po-voucher,
+  #printable-invoice-voucher {
     border: none !important;
     box-shadow: none !important;
     padding: 0 !important;
